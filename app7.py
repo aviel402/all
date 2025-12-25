@@ -1,1 +1,419 @@
+import json
+import uuid
+import time
+import random
+from flask import Flask, request, render_template_string, redirect, jsonify, make_response
 
+app = Flask(__name__)
+app.secret_key = "factions_war_secret_key"
+
+DB_FILE = "factions_db.json"
+
+# --- נתוני עולם בסיסיים ---
+ROLES = {
+    "fighter": {"name": "🗡️ לוחם", "hp": 120, "ap_regen": 2, "desc": "תוקף שחקנים וגונב כסף"},
+    "merchant": {"name": "💎 סוחר", "hp": 80, "ap_regen": 3, "desc": "מייצר כסף ומבצע עסקאות"},
+    "manager": {"name": "👔 מנהל", "hp": 100, "ap_regen": 1, "desc": "גובה מיסים ושולט בתקציב העיר"},
+    "spy": {"name": "🕵️ מרגל", "hp": 60, "ap_regen": 4, "desc": "בלתי נראה, גונב בשקט"}
+}
+
+# --- ניהול דאטהבייס (JSON) ---
+def load_db():
+    if not os_path_exists(DB_FILE):
+        return {"players": {}, "city_bank": 500, "logs": []}
+    try:
+        with open(DB_FILE, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except:
+        return {"players": {}, "city_bank": 500, "logs": []}
+
+def save_db(data):
+    with open(DB_FILE, 'w', encoding='utf-8') as f:
+        json.dump(data, f, ensure_ascii=False)
+
+def os_path_exists(path):
+    import os
+    return os.path.exists(path)
+
+# פונקצית לוג משותף לכולם
+def add_log(db, text):
+    import datetime
+    time_str = datetime.datetime.now().strftime("%H:%M:%S")
+    db['logs'].insert(0, f"[{time_str}] {text}")
+    db['logs'] = db['logs'][:50] # שומר רק 50 שורות אחרונות
+
+# --- צד השרת: לוגיקה ---
+
+@app.route('/')
+def home():
+    uid = request.cookies.get('user_id')
+    db = load_db()
+    
+    # אם אין משתמש או שהמשתמש לא קיים במאגר - לך להרשמה
+    if not uid or uid not in db['players']:
+        return render_template_string(LOGIN_HTML)
+    
+    # טוען את דף המשחק
+    player = db['players'][uid]
+    return render_template_string(GAME_HTML, me=player, role_name=ROLES[player['role']]['name'])
+
+@app.route('/login', methods=['POST'])
+def login():
+    username = request.form.get('username')
+    role = request.form.get('role')
+    
+    if not username or role not in ROLES:
+        return "שגיאה בפרטים", 400
+
+    db = load_db()
+    uid = str(uuid.uuid4())
+    
+    # יצירת שחקן חדש
+    db['players'][uid] = {
+        "id": uid,
+        "name": username,
+        "role": role,
+        "money": 100 if role != 'manager' else 1000, # למנהל יש תקציב התחלתי
+        "hp": ROLES[role]['hp'],
+        "max_hp": ROLES[role]['hp'],
+        "ap": 10, # Action Points
+        "max_ap": 10,
+        "last_seen": time.time()
+    }
+    
+    add_log(db, f"✨ {username} הצטרף לעיר בתור {ROLES[role]['name']}.")
+    save_db(db)
+    
+    resp = make_response(redirect('/'))
+    resp.set_cookie('user_id', uid)
+    return resp
+
+# --- API לעדכון נתונים בזמן אמת (Polling) ---
+@app.route('/api/update')
+def api_update():
+    uid = request.cookies.get('user_id')
+    db = load_db()
+    
+    if not uid or uid not in db['players']: return jsonify({"reload": True})
+    
+    me = db['players'][uid]
+    
+    # חידוש אנרגיה (AP) לפי זמן
+    current_time = time.time()
+    time_diff = current_time - me['last_seen']
+    
+    # אם עבר זמן - הוסף אנרגיה ועדכן "נראה לאחרונה"
+    if time_diff > 5: 
+        regen = ROLES[me['role']]['ap_regen']
+        if me['ap'] < me['max_ap']:
+            me['ap'] = min(me['max_ap'], me['ap'] + regen)
+        me['last_seen'] = current_time
+        save_db(db)
+
+    # סינון שחקנים לתצוגה
+    visible_players = []
+    for pid, p in db['players'].items():
+        # לא מראים את עצמנו ברשימה
+        if pid == uid: continue
+        # לא מראים שחקנים לא פעילים (מעל דקה)
+        if current_time - p['last_seen'] > 60: continue
+        
+        # לוגיקה למרגל: מרגלים לא מופיעים ברשימה לאחרים (רק למרגלים אחרים)
+        if p['role'] == 'spy' and me['role'] != 'spy': continue
+        
+        visible_players.append({
+            "id": p['id'],
+            "name": p['name'],
+            "role": p['role'],
+            "role_icon": ROLES[p['role']]['name'].split(' ')[0],
+            "hp": p['hp'],
+            "money": p['money'] if me['role'] == 'spy' else '???' # רק מרגל רואה כמה כסף יש לאחרים
+        })
+
+    return jsonify({
+        "me": me,
+        "city_bank": db['city_bank'],
+        "players": visible_players,
+        "logs": db['logs']
+    })
+
+# --- ביצוע פעולות ---
+@app.route('/api/action', methods=['POST'])
+def perform_action():
+    data = request.json
+    action = data.get('action')
+    target_id = data.get('target_id')
+    
+    uid = request.cookies.get('user_id')
+    db = load_db()
+    
+    me = db['players'].get(uid)
+    target = db['players'].get(target_id)
+    
+    if not me: return jsonify({"error": "No user"})
+    if me['ap'] < 2: return jsonify({"msg": "❌ אין מספיק אנרגיה!"})
+    
+    msg = ""
+    
+    # 🗡️ לוחם: תקיפה
+    if action == 'attack' and me['role'] == 'fighter' and target:
+        damage = random.randint(10, 20)
+        stolen = int(target['money'] * 0.1) # גונב 10%
+        
+        target['hp'] -= damage
+        target['money'] -= stolen
+        me['money'] += stolen
+        me['ap'] -= 3
+        
+        msg = f"⚔️ תקפת את {target['name']}! גרמת {damage} נזק ולקחת {stolen}$."
+        add_log(db, f"🗡️ {me['name']} תקף את {target['name']} ושדד {stolen}$.")
+
+    # 💎 סוחר: מסחר (יצירת כסף)
+    elif action == 'trade' and me['role'] == 'merchant':
+        profit = random.randint(30, 60)
+        tax = int(profit * 0.2) # 20% מס לקופה הציבורית
+        
+        me['money'] += (profit - tax)
+        db['city_bank'] += tax
+        me['ap'] -= 3
+        
+        msg = f"💎 הרווחת {profit - tax}$. שילמת {tax}$ מס לעיר."
+        add_log(db, f"⚖️ {me['name']} סגר עסקה בשוק. הקופה הציבורית גדלה.")
+
+    # 👔 מנהל: גביית מיסים
+    elif action == 'tax' and me['role'] == 'manager' and target:
+        amount = int(target['money'] * 0.3)
+        target['money'] -= amount
+        db['city_bank'] += amount
+        me['ap'] -= 5
+        
+        msg = f"📜 החרמת {amount}$ מ-{target['name']} לטובת הציבור."
+        add_log(db, f"🏛️ המנהל {me['name']} גבה מס כפוי מ-{target['name']}.")
+
+    # 🕵️ מרגל: גניבה
+    elif action == 'steal' and me['role'] == 'spy' and target:
+        chance = random.random()
+        me['ap'] -= 4
+        if chance > 0.3: # הצלחה
+            amount = int(target['money'] * 0.4)
+            target['money'] -= amount
+            me['money'] += amount
+            msg = f"🕵️ הצלחה! גנבת {amount}$ מ-{target['name']} בלי שיבחינו."
+            # לא כותבים בלוג הציבורי מי עשה את זה!
+            add_log(db, f"❓ מישהו מסתורי גנב כסף מ-{target['name']}...")
+        else: # כישלון
+            damage = 15
+            me['hp'] -= damage
+            msg = "⚠️ נתפסת! שומרי הראש הרביצו לך."
+            add_log(db, f"🚨 {me['name']} נתפס מנסה לכייס את {target['name']}!")
+
+    # רפואה עצמית (לכולם)
+    elif action == 'heal':
+        if me['money'] >= 20:
+            me['money'] -= 20
+            me['hp'] = min(me['max_hp'], me['hp'] + 30)
+            me['ap'] -= 2
+            msg = "➕ קנית תרופה. החיים עלו."
+        else:
+            msg = "❌ אין מספיק כסף לתרופה."
+
+    save_db(db)
+    return jsonify({"msg": msg})
+
+# --- HTML (Frontend) ---
+
+LOGIN_HTML = """
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Factions - התחברות</title>
+<style>
+body { background: #111; color: white; font-family: sans-serif; text-align: center; padding: 20px; }
+input, select, button { padding: 15px; margin: 10px; width: 80%; border-radius: 8px; border: none; font-size: 18px; }
+button { background: #00d4ff; color: #000; font-weight: bold; cursor: pointer; }
+.card { background: #222; padding: 20px; border-radius: 15px; border: 1px solid #444; max-width: 400px; margin: 0 auto; }
+</style>
+</head>
+<body>
+<h1>FACTIONS WARS 🌍</h1>
+<div class="card">
+    <form action="/login" method="post">
+        <input type="text" name="username" placeholder="בחר כינוי" required>
+        <h3>בחר מעמד:</h3>
+        <select name="role">
+            <option value="fighter">🗡️ לוחם (קרבי)</option>
+            <option value="merchant">💎 סוחר (כלכלי)</option>
+            <option value="manager">👔 מנהל (פוליטי)</option>
+            <option value="spy">🕵️ מרגל (התגנבות)</option>
+        </select>
+        <button type="submit">היכנס לעולם</button>
+    </form>
+</div>
+</body>
+</html>
+"""
+
+GAME_HTML = """
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Factions Game</title>
+<style>
+body { margin:0; background: #0f0f13; color: #e0e0e0; font-family: 'Segoe UI', sans-serif; padding-bottom: 20px;}
+.header { background: #1f1f23; padding: 15px; position: sticky; top:0; z-index:100; border-bottom: 2px solid #00d4ff; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 5px 20px rgba(0,0,0,0.5); }
+.stats span { margin-left: 10px; font-weight: bold; }
+.ap { color: #ffd700; } .hp { color: #ff4d4d; } .money { color: #00ff7f; }
+
+.container { max-width: 600px; margin: 0 auto; padding: 10px; }
+
+/* לוג */
+.logs { background: #000; height: 120px; overflow-y: scroll; padding: 10px; border-radius: 8px; border: 1px solid #333; font-size: 13px; font-family: monospace; color: #888; margin-bottom: 20px; }
+.logs div { border-bottom: 1px solid #111; padding: 3px 0; }
+
+/* רשימת שחקנים */
+.player-card { 
+    background: #25252b; margin-bottom: 10px; padding: 15px; border-radius: 10px; 
+    display: flex; justify-content: space-between; align-items: center; border: 1px solid #333;
+}
+.player-info { display: flex; flex-direction: column; }
+.player-name { font-weight: bold; font-size: 16px; color: #fff; }
+.player-role { font-size: 12px; color: #aaa; }
+
+/* כפתורי פעולה */
+.actions { display: flex; gap: 5px; }
+button { border: none; padding: 8px 12px; border-radius: 5px; cursor: pointer; font-weight: bold; transition: 0.2s; }
+.btn-atk { background: #b71c1c; color: white; }
+.btn-tax { background: #1565c0; color: white; }
+.btn-steal { background: #4a148c; color: white; }
+.btn-self { background: #333; color: #aaa; border: 1px solid #555; width: 100%; margin-bottom: 15px; padding: 12px; }
+
+.toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #333; padding: 10px 20px; border-radius: 20px; border: 1px solid #00d4ff; display: none; z-index: 200; box-shadow: 0 0 15px rgba(0,212,255,0.4); }
+
+.bank-info { text-align: center; color: #888; font-size: 12px; margin-top: -15px; margin-bottom: 15px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+    <div style="font-weight:900; font-size:18px;">{{ me.name }}</div>
+    <div class="stats">
+        <span class="hp">❤️ <span id="val-hp">{{ me.hp }}</span></span>
+        <span class="ap">⚡ <span id="val-ap">{{ me.ap }}</span></span>
+        <span class="money">💵 <span id="val-money">{{ me.money }}</span></span>
+    </div>
+</div>
+
+<div class="container">
+    <div style="text-align: center; color: #aaa; font-size: 14px; margin: 10px 0;">אתה משחק בתור: <b>{{ role_name }}</b></div>
+    
+    <!-- כפתורים מיוחדים לעצמך -->
+    {% if me.role == 'merchant' %}
+        <button class="btn-self" onclick="doAction('trade')" style="background: #1b5e20; color: #fff; border: 1px solid #66bb6a;">⚖️ בצע עסקת מסחר (הכנסה)</button>
+    {% endif %}
+    
+    <button class="btn-self" onclick="doAction('heal')">💊 קנה תרופה (20$)</button>
+
+    <div class="logs" id="log-box">loading logs...</div>
+    
+    <div class="bank-info">🏛️ קופת העיר: <span id="city-bank">0</span>$</div>
+
+    <div id="players-list">
+        <!-- השחקנים יטענו כאן ב-JS -->
+    </div>
+</div>
+
+<div id="toast" class="toast">הודעה</div>
+
+<script>
+let myRole = "{{ me.role }}";
+
+function update() {
+    fetch('/api/update')
+    .then(r => r.json())
+    .then(data => {
+        if(data.reload) window.location.reload();
+        
+        // עדכון סטטים שלי
+        document.getElementById('val-hp').innerText = data.me.hp;
+        document.getElementById('val-ap').innerText = data.me.ap;
+        document.getElementById('val-money').innerText = data.me.money;
+        document.getElementById('city-bank').innerText = data.city_bank;
+
+        // עדכון לוג
+        let logsHtml = "";
+        data.logs.forEach(l => logsHtml += `<div>${l}</div>`);
+        document.getElementById('log-box').innerHTML = logsHtml;
+
+        // בניית רשימת שחקנים
+        let playersHtml = "";
+        data.players.forEach(p => {
+            let actions = "";
+            
+            // כפתורים לפי התפקיד שלי
+            if (myRole === 'fighter') {
+                actions = `<button class="btn-atk" onclick="doAction('attack', '${p.id}')">תקוף</button>`;
+            } else if (myRole === 'manager') {
+                actions = `<button class="btn-tax" onclick="doAction('tax', '${p.id}')">החרם כסף</button>`;
+            } else if (myRole === 'spy') {
+                actions = `<button class="btn-steal" onclick="doAction('steal', '${p.id}')">גנוב</button>`;
+            } else if (myRole === 'merchant') {
+                actions = `<span style='font-size:12px; color:gray'>לקוח פוטנציאלי</span>`;
+            }
+
+            // תצוגת כסף (רק מרגל רואה)
+            let moneyDisplay = myRole === 'spy' ? `<div style="color:gold; font-size:11px">💰 ${p.money}</div>` : '';
+
+            playersHtml += `
+            <div class="player-card">
+                <div class="player-info">
+                    <div class="player-name">${p.role_icon} ${p.name}</div>
+                    <div class="player-role">❤️ ${p.hp} | ${p.role}</div>
+                    ${moneyDisplay}
+                </div>
+                <div class="actions">${actions}</div>
+            </div>`;
+        });
+        
+        if (data.players.length === 0) {
+            playersHtml = "<div style='text-align:center; padding:20px; color:#555'>אין שחקנים אחרים כרגע... חכה שיצטרפו</div>";
+        }
+        
+        document.getElementById('players-list').innerHTML = playersHtml;
+    });
+}
+
+function doAction(act, targetId = null) {
+    fetch('/api/action', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ action: act, target_id: targetId })
+    })
+    .then(r => r.json())
+    .then(res => {
+        if(res.error) alert(res.error);
+        if(res.msg) showToast(res.msg);
+        update(); // רענון מידי
+    });
+}
+
+function showToast(msg) {
+    let t = document.getElementById('toast');
+    t.innerText = msg;
+    t.style.display = 'block';
+    setTimeout(() => { t.style.display = 'none'; }, 3000);
+}
+
+// עדכון כל 2 שניות
+setInterval(update, 2000);
+update();
+</script>
+
+</body>
+</html>
+"""
+
+if __name__ == '__main__':
+    # מריץ את השרת על פורט 5000, נגיש מכל הרשת המקומית
+    app.run(host='0.0.0.0', port=5000, debug=True)
