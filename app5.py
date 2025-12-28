@@ -122,6 +122,7 @@ class Game:
 state = Game()
 
 # --- עיצוב גרפי (Cyber-Military) ---
+# הערה: כל הלינקים עודכנו להתחיל ב- /game5/
 
 HTML = """
 <!DOCTYPE html>
@@ -189,6 +190,10 @@ HTML = """
         .log-lose { color: #ef4444; }
         .log-title { color: white; border-bottom: 1px dashed #333; margin-bottom: 5px; }
 
+        /* Back button */
+        .back-link { margin-top:20px; display:inline-block; color:#aaa; font-size:12px; text-decoration:none; }
+        .back-link:hover { text-decoration: underline; color: #fff; }
+
     </style>
 </head>
 <body>
@@ -210,7 +215,7 @@ HTML = """
     </div>
 
     <div class="battle-section">
-        <a href="/fight"><button class="btn-fight">🔥 שלח צבא לקרב 🔥</button></a>
+        <a href="/game5/fight"><button class="btn-fight">🔥 שלח צבא לקרב 🔥</button></a>
         <div style="margin-top:10px; font-size:12px; color:#ef4444;">אזהרה: יחידות ימותו בקרב!</div>
     </div>
 
@@ -222,7 +227,7 @@ HTML = """
             <span class="unit-name">{{ unit.name }}</span>
             <div class="unit-cost">{{ unit.cost }}$ </div>
             <div class="unit-owned">יש ברשותך: <b>{{ game.army[key] }}</b></div>
-            <a href="/buy/{{ key }}"><button class="btn-buy">גייס (+1)</button></a>
+            <a href="/game5/buy/{{ key }}"><button class="btn-buy">גייס (+1)</button></a>
         </div>
         {% endfor %}
     </div>
@@ -235,7 +240,7 @@ HTML = """
                 <div style="font-weight:bold; color: white">{{ upg.name }}</div>
                 <div style="font-size:12px">רמה נוכחית: {{ game.tech[key] }}</div>
             </div>
-            <a href="/upgrade/{{ key }}">
+            <a href="/game5/upgrade/{{ key }}">
                 <button class="btn-upgrade">{{ game.upgrade_costs[key] }}$ ▲</button>
             </a>
         </div>
@@ -243,7 +248,8 @@ HTML = """
     </div>
     
     <br>
-    <a href="/reset" style="color: #64748b; font-size:12px">אפס משחק</a>
+    <a href="/game5/reset" style="color: #64748b; font-size:12px; margin-left: 10px;">אפס משחק</a>
+    <a href="/" class="back-link">יציאה ללובי</a>
 
 </div>
 
@@ -263,7 +269,7 @@ def buy(unit_key):
     if state.gold >= cost:
         state.gold -= cost
         state.army[unit_key] += 1
-    return redirect('/')
+    return redirect('/game5/')
 
 @app.route('/upgrade/<upg_key>')
 def upgrade(upg_key):
@@ -273,17 +279,17 @@ def upgrade(upg_key):
         state.tech[upg_key] = round(state.tech[upg_key] * UPGRADES[upg_key]['factor'], 2)
         # המחיר עולה פי 2 בכל שדרוג
         state.upgrade_costs[upg_key] = int(cost * 1.8)
-    return redirect('/')
+    return redirect('/game5/')
 
 @app.route('/fight')
 def battle():
     state.fight()
-    return redirect('/')
+    return redirect('/game5/')
 
 @app.route('/reset')
 def reset():
     state.reset()
-    return redirect('/')
+    return redirect('/game5/')
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
