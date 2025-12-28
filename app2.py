@@ -70,7 +70,7 @@ class Player:
         self.damage += 5
         self.add_log(f"🎉 עלית לרמה {self.level}! כוח וחיים גדלו.")
 
-# --- ממשק HTML ---
+# --- ממשק HTML (מעודכן עם קישורי /game2) ---
 
 HTML_TEMPLATE = """
 <!DOCTYPE html>
@@ -125,6 +125,10 @@ HTML_TEMPLATE = """
         .combat-btn { background: #3e1212; border-color: #ff4d4d; }
         .heal-btn { background: #0f3d0f; border-color: #4dff4d; }
         .shop-btn { background: #3d3d0f; border-color: #ffff4d; }
+        
+        /* Back to Main Menu Link */
+        .back-menu { margin-top: 20px; color: #aaa; text-decoration: none; font-size: 12px; }
+        .back-menu:hover { color: white; text-decoration: underline; }
 
     </style>
 </head>
@@ -155,29 +159,31 @@ HTML_TEMPLATE = """
         <div class="actions">
             {% if p.hp <= 0 %}
                 <!-- מסך מוות -->
-                <button onclick="window.location.href='/restart'" style="grid-column: span 2; background: red;">☠️ מתת! התחל מחדש</button>
+                <button onclick="window.location.href='/game2/restart'" style="grid-column: span 2; background: red;">☠️ מתת! התחל מחדש</button>
             
             {% elif p.in_combat %}
                 <!-- מצב קרב -->
-                <button class="combat-btn" onclick="window.location.href='/action/attack'">⚔️ התקפה</button>
-                <button class="heal-btn" onclick="window.location.href='/action/heal'">🧪 שתה שיקוי</button>
-                <button onclick="window.location.href='/action/flee'">🏃 ברח (אבד זהב)</button>
+                <button class="combat-btn" onclick="window.location.href='/game2/action/attack'">⚔️ התקפה</button>
+                <button class="heal-btn" onclick="window.location.href='/game2/action/heal'">🧪 שתה שיקוי</button>
+                <button onclick="window.location.href='/game2/action/flee'">🏃 ברח (אבד זהב)</button>
             
             {% elif p.location == 'town' %}
                 <!-- עיר -->
-                <button onclick="window.location.href='/travel/forest'">🌲 צא ליער (רמות 1-3)</button>
-                <button style="border-color: red" onclick="window.location.href='/travel/cave'">💀 למערת הבוס (רמה 5+)</button>
-                <button class="shop-btn" onclick="window.location.href='/shop/buy_potion'">🧪 קנה שיקוי (30 💰)</button>
-                <button class="shop-btn" onclick="window.location.href='/shop/upgrade_weapon'">⚔️ שדרג נשק (100 💰)</button>
-                <button class="heal-btn" onclick="window.location.href='/action/inn'">🏨 פונדק - שינה מלאה (10 💰)</button>
+                <button onclick="window.location.href='/game2/travel/forest'">🌲 צא ליער (רמות 1-3)</button>
+                <button style="border-color: red" onclick="window.location.href='/game2/travel/cave'">💀 למערת הבוס (רמה 5+)</button>
+                <button class="shop-btn" onclick="window.location.href='/game2/shop/buy_potion'">🧪 קנה שיקוי (30 💰)</button>
+                <button class="shop-btn" onclick="window.location.href='/game2/shop/upgrade_weapon'">⚔️ שדרג נשק (100 💰)</button>
+                <button class="heal-btn" onclick="window.location.href='/game2/action/inn'">🏨 פונדק - שינה מלאה (10 💰)</button>
 
             {% elif p.location == 'forest' or p.location == 'cave' %}
                 <!-- בחוץ בחיפוש -->
-                <button class="combat-btn" onclick="window.location.href='/action/explore'">🔍 סייר באזור (חפש אויבים)</button>
-                <button onclick="window.location.href='/travel/town'">🏠 חזור לעיר (בטוח)</button>
+                <button class="combat-btn" onclick="window.location.href='/game2/action/explore'">🔍 סייר באזור (חפש אויבים)</button>
+                <button onclick="window.location.href='/game2/travel/town'">🏠 חזור לעיר (בטוח)</button>
             {% endif %}
         </div>
     </div>
+    
+    <a href="/" class="back-menu">חזור לתפריט הראשי</a>
 
 </body>
 </html>
@@ -187,7 +193,6 @@ HTML_TEMPLATE = """
 
 def get_player():
     # בודק לפי ה-IP או יוצר משתמש זמני בדפדפן אם הוא חדש
-    # (לשם הפשטות במשחק Web רגיל נשתמש בעוגיה, כאן משתמש בזיכרון)
     uid = request.cookies.get('rpg_uid')
     if uid and uid in players:
         return players[uid]
@@ -198,14 +203,27 @@ def create_new_player():
     players[new_p.id] = new_p
     return new_p
 
-# --- Routes ---
+# --- Routes (כולל /game2) ---
+
+# חשוב: כשאנו עובדים עם DispatcherMiddleware ב-Flask, הוא חותך את הקידומת באופן אוטומטי.
+# כלומר, כשמגיעה בקשה ל-/game2/, ה-App הזה מקבל '/'.
+# כשמגיעה בקשה ל-/game2/travel/forest, ה-App הזה מקבל '/travel/forest'.
+# לכן, הגדרת ה-Route בפייתון נשארת רגילה (/travel/...), אבל ב-HTML הפנייה חייבת להיות המלאה (/game2/travel/...).
+# למעט המקרה של redirect בתוך הפייתון - ששם לפעמים צריך לוודא שאנו לא שוברים את הקידומת.
+
+# הערה לביצוע בטוח: אני אשאר עם ה-Routes המקוריים בקוד פייתון, כי DispatcherMiddleware
+# דואג לנתב את '/game2/abc' לתוך הראוטר '/abc' של האפליקציה הזאת.
+# השינוי העיקרי הוא ב-HTML (שעשיתי למעלה) וב-redirects (שנעשה כאן למטה ידנית עם prefix אם צריך, אבל לרוב url_for אמור להסתדר).
+# במקרה פשוט של url_for בלי הקשר מלא, עדיף להפנות ידנית או לתת למידלוור לטפל בזה.
+# ליתר ביטחון, אני אגדיר את ה-Redirects שיפנו ישירות לנתיב היחסי או המלא.
 
 @app.route('/')
 def home():
     p = get_player()
     if not p:
         p = create_new_player()
-        resp = redirect(url_for('home'))
+        # הפניה ל /game2/ בגלל שזו הכניסה למשחק הזה
+        resp = redirect('/game2/') 
         resp.set_cookie('rpg_uid', p.id)
         return resp
 
@@ -233,14 +251,14 @@ def home():
 def restart():
     # מוחק דמות ויוצר חדשה
     p = create_new_player()
-    resp = redirect(url_for('home'))
+    resp = redirect('/game2/')
     resp.set_cookie('rpg_uid', p.id)
     return resp
 
 @app.route('/travel/<destination>')
 def travel(destination):
     p = get_player()
-    if not p or p.hp <= 0 or p.in_combat: return redirect('/')
+    if not p or p.hp <= 0 or p.in_combat: return redirect('/game2/')
     
     if destination == "cave" and p.level < 3:
         p.add_log("השומר במערה עוצר אותך: 'רק לוחמים ברמה 3 ומעלה!'")
@@ -248,12 +266,12 @@ def travel(destination):
         p.location = destination
         p.add_log(f"עברת ל-{destination}.")
     
-    return redirect('/')
+    return redirect('/game2/')
 
 @app.route('/shop/<action>')
 def shop(action):
     p = get_player()
-    if not p or p.hp <= 0 or p.in_combat or p.location != "town": return redirect('/')
+    if not p or p.hp <= 0 or p.in_combat or p.location != "town": return redirect('/game2/')
 
     if action == "buy_potion":
         if p.gold >= 30:
@@ -273,12 +291,12 @@ def shop(action):
         else:
             p.add_log(f"אין מספיק זהב לשדרוג (צריך {cost}).")
 
-    return redirect('/')
+    return redirect('/game2/')
 
 @app.route('/action/<act>')
 def perform_action(act):
     p = get_player()
-    if not p: return redirect('/')
+    if not p: return redirect('/game2/')
 
     # ---- לינה בפונדק ----
     if act == "inn" and p.location == "town":
@@ -298,7 +316,7 @@ def perform_action(act):
 
     # ---- סייר וחפש אויבים (Exploration) ----
     elif act == "explore" and not p.in_combat:
-        if p.hp <= 0: return redirect('/')
+        if p.hp <= 0: return redirect('/game2/')
         
         # 30% סיכוי לא למצוא כלום
         if random.random() > 0.7:
@@ -340,7 +358,7 @@ def perform_action(act):
         p.in_combat = False
         p.add_log(f"ברחת כל עוד נפשך בך... הפלת {loss} מטבעות תוך כדי ריצה.")
 
-    return redirect('/')
+    return redirect('/game2/')
 
 # --- לוגיקה קרבית ---
 
