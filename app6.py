@@ -161,7 +161,7 @@ class Colony:
 
 colony = Colony()
 
-# --- ממשק WEB ---
+# --- ממשק WEB (מעודכן ל- /game6/) ---
 
 HTML = """
 <!DOCTYPE html>
@@ -203,6 +203,8 @@ HTML = """
         
         .policy-btn { opacity: 0.5; }
         .active-policy { opacity: 1; border: 2px solid white; font-weight: bold; }
+        
+        .back-menu { display:block; margin-top:20px; text-decoration:none; color:#777; font-size:12px; }
 
     </style>
 </head>
@@ -217,12 +219,13 @@ HTML = """
 
     <div class="controls">
         <b>מדיניות שליט:</b>
-        <a href="/policy/strict"><button class="policy-btn {{ 'active-policy' if game.policy=='strict' else '' }}">קשוחה (עבודה+ / אושר-)</button></a>
-        <a href="/policy/neutral"><button class="policy-btn {{ 'active-policy' if game.policy=='neutral' else '' }}">רגילה</button></a>
-        <a href="/policy/relaxed"><button class="policy-btn {{ 'active-policy' if game.policy=='relaxed' else '' }}">חופשית (אושר+ / צריכה+)</button></a>
+        <!-- עדכון קישורים -->
+        <a href="/game6/policy/strict"><button class="policy-btn {{ 'active-policy' if game.policy=='strict' else '' }}">קשוחה (עבודה+ / אושר-)</button></a>
+        <a href="/game6/policy/neutral"><button class="policy-btn {{ 'active-policy' if game.policy=='neutral' else '' }}">רגילה</button></a>
+        <a href="/game6/policy/relaxed"><button class="policy-btn {{ 'active-policy' if game.policy=='relaxed' else '' }}">חופשית (אושר+ / צריכה+)</button></a>
         <span style="float:left">
-            <a href="/action/scavenge"><button>שלח משלחת חיפוש</button></a>
-            <a href="/reset"><button class="bad">אפס עולם</button></a>
+            <a href="/game6/action/scavenge"><button>שלח משלחת חיפוש</button></a>
+            <a href="/game6/reset"><button class="bad">אפס עולם</button></a>
         </span>
     </div>
 
@@ -250,6 +253,8 @@ HTML = """
             <div>{{ l }}</div>
         {% endfor %}
     </div>
+    
+    <a href="/" class="back-menu">יציאה ללובי</a>
 
 </body>
 </html>
@@ -268,7 +273,7 @@ def set_policy(mode):
     colony.policy = mode
     colony.add_log(f"החוקים השתנו. מדיניות חדשה: {mode}")
     colony.save()
-    return redirect('/')
+    return redirect('/game6/') # נתיב מעודכן
 
 @app.route('/action/scavenge')
 def scavenge():
@@ -290,13 +295,13 @@ def scavenge():
         colony.add_log(f"המשלחת חזרה בשלום. הבאתם {loot_food} אוכל ו-{loot_wood} עץ.")
     
     colony.save()
-    return redirect('/')
+    return redirect('/game6/') # נתיב מעודכן
 
 @app.route('/reset')
 def reset():
     colony.create_new()
     colony.save()
-    return redirect('/')
+    return redirect('/game6/') # נתיב מעודכן
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
