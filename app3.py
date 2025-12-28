@@ -112,6 +112,7 @@ class GameState:
 state = GameState()
 
 # --- CSS & HTML ---
+# נוספה שורת "חזור לתפריט" בתחתית ה-body, ועדכנתי את הלינקים שיתחילו ב-/game3
 STYLE = """
 <style>
     body { background-color: #0d1117; color: #c9d1d9; font-family: 'Segoe UI', sans-serif; text-align: center; direction: rtl; }
@@ -164,9 +165,14 @@ STYLE = """
     a.btn-reset { display:inline-block; margin-top:20px; color:#58a6ff; text-decoration:none; border:1px solid #58a6ff; padding:10px 20px; border-radius:5px;}
 
     @keyframes fadeIn { from { opacity:0; transform: translateY(10px); } to { opacity:1; transform: translateY(0); } }
+    
+    /* כפתור חזור */
+    .back-btn { margin-top: 30px; display: inline-block; color: #58a6ff; font-size: 12px; text-decoration: none;}
+    .back-btn:hover { text-decoration: underline; }
 </style>
 """
 
+# שימו לב לשימוש ב /game3/ לפני כל נתיב יחסי
 TEMPLATE = """
 <!DOCTYPE html>
 <html>
@@ -202,14 +208,14 @@ TEMPLATE = """
             <div class="event-card game-over">
                 <h2 class="event-title">💀 המשחק נגמר</h2>
                 <p>הספינה נכשלה במשימתה. האנושות איבדה תקווה.</p>
-                <a href="/reset" class="btn-reset">נסה שוב מההתחלה</a>
+                <a href="/game3/reset" class="btn-reset">נסה שוב מההתחלה</a>
             </div>
         {% elif s.victory %}
             <div class="event-card victory">
                 <h2 class="event-title">🎉 ניצחון!</h2>
                 <p>הגעתם למאדים בשלום! הקולוניה הוקמה בהצלחה.</p>
                 <p>צוות ששרד: {{ s.crew }} | מצב ספינה: {{ s.hull }}%</p>
-                <a href="/reset" class="btn-reset">שחק שוב</a>
+                <a href="/game3/reset" class="btn-reset">שחק שוב</a>
             </div>
         {% else %}
             <div class="event-card">
@@ -218,13 +224,16 @@ TEMPLATE = """
                 
                 <div class="choices">
                     {% for choice in s.current_event.choices %}
-                        <a href="/act/{{ loop.index0 }}">
+                        <!-- חשוב: שימוש בנתיב המותאם -->
+                        <a href="/game3/act/{{ loop.index0 }}">
                             <button>{{ choice.txt }}</button>
                         </a>
                     {% endfor %}
                 </div>
             </div>
         {% endif %}
+        
+        <a href="/" class="back-btn">חזור לתפריט המשחקים</a>
 
     </div>
 </body>
@@ -238,7 +247,7 @@ def home():
 @app.route('/act/<int:choice_idx>')
 def act(choice_idx):
     if state.game_over or state.victory:
-        return redirect('/')
+        return redirect('/game3/')  # נתיב מעודכן
 
     # ביצוע הבחירה
     choice = state.current_event['choices'][choice_idx]
@@ -249,7 +258,6 @@ def act(choice_idx):
     
     if 'cred' in effects: 
         state.credits += effects['cred']
-        # אם אין כסף - הפעולה לא אמורה להיות מוצגת, אבל כאן לפשטות נאפשר מינוס כ"חוב"
     
     if 'nrg' in effects:
         state.energy += effects['nrg']
@@ -281,12 +289,12 @@ def act(choice_idx):
     if not state.game_over and not state.victory:
         state.generate_event()
 
-    return redirect('/')
+    return redirect('/game3/')  # נתיב מעודכן
 
 @app.route('/reset')
 def reset():
     state.reset()
-    return redirect('/')
+    return redirect('/game3/')  # נתיב מעודכן
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
