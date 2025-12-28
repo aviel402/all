@@ -14,7 +14,7 @@ from app8 import app as game8
 from app9 import app as game9
 from app10 import app as game10
 from app11 import app as game11
-
+from app12 import app as game12
 # יצירת אפליקציית "לובי" ראשית
 main_app = Flask(__name__)
 
@@ -57,6 +57,8 @@ MENU_HTML = """
         <a href="/game9/" class="card"><span>📉</span><h2>Wall Street</h2><div class="tag">שוק ההון</div></a>
         <a href="/game10/" class="card"><span>🔩</span><h2>Iron & Dust</h2><div class="tag">בנייה בזמן אמת</div></a>
         <a href="/game11/" class="card"><span>⚽</span><h2>Manager Pro</h2><div class="tag">ניהול כדורגל</div></a>
+        <a href="/game12/" class="card"><span>💼</span><h2>trade game</h2><div class="tag">תחרות חנויות</div></a>
+
     </div>
 </body>
 </html>
@@ -79,7 +81,8 @@ app = DispatcherMiddleware(main_app, {
     '/game8': game8,
     '/game9': game9,
     '/game10': game10,
-    '/game11': game11
+    '/game11': game11,
+    '/game12': game12
 })
 
 if __name__ == "__main__":
