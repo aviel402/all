@@ -8,9 +8,6 @@ from flask import Flask, request, render_template_string, redirect, jsonify, mak
 app = Flask(__name__)
 app.secret_key = "factions_war_secret_key"
 
-# --- הקבוע שיסדר את כל הבעיות ---
-GAME_PATH = "/game6" 
-
 DB_FILE = "factions_db.json"
 
 ROLES = {
@@ -60,8 +57,7 @@ button { background: #00d4ff; color: #000; font-weight: bold; cursor: pointer; }
 <body>
 <h1>FACTIONS WARS 🌍</h1>
 <div class="card">
-    <!-- שימוש בפרמטר base -->
-    <form action="{{ base }}/login" method="post">
+    <form action="/game6/login" method="post">
         <input type="text" name="username" placeholder="בחר כינוי" required>
         <h3>בחר מעמד:</h3>
         <select name="role">
@@ -134,11 +130,11 @@ button { border: none; padding: 8px 12px; border-radius: 5px; cursor: pointer; f
 <div id="toast" class="toast">הודעה</div>
 
 <script>
-const BASE_PATH = "{{ base }}"; // הפרמטר מגיע מכאן!
+// כתובות קשיחות ובטוחות ל-AJAX
+const BASE = "/game6";
 
 function update() {
-    // שרשור הקבוע לנתיב ה-API
-    fetch(BASE_PATH + '/api/update')
+    fetch(BASE + '/api/update')
     .then(r => r.json())
     .then(data => {
         if(data.reload) window.location.reload();
@@ -181,7 +177,7 @@ function update() {
 }
 
 function doAction(act, targetId = null) {
-    fetch(BASE_PATH + '/api/action', {
+    fetch(BASE + '/api/action', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({ action: act, target_id: targetId })
@@ -215,12 +211,11 @@ def home():
     uid = request.cookies.get('user_id')
     db = load_db()
     
-    # שליחת הפרמטר base לתבנית ה-HTML
     if not uid or uid not in db['players']:
-        return render_template_string(LOGIN_HTML, base=GAME_PATH)
+        return render_template_string(LOGIN_HTML)
     
     player = db['players'][uid]
-    return render_template_string(GAME_HTML, me=player, role_name=ROLES[player['role']]['name'], base=GAME_PATH)
+    return render_template_string(GAME_HTML, me=player, role_name=ROLES[player['role']]['name'])
 
 @app.route('/login', methods=['POST'])
 def login():
@@ -243,9 +238,9 @@ def login():
     add_log(db, f"✨ {username} הצטרף ({ROLES[role]['name']}).")
     save_db(db)
     
-    # הפנייה עם הקידומת
-    resp = make_response(redirect(f"{GAME_PATH}/"))
-    resp.set_cookie('user_id', uid)
+    # התיקון הקריטי: redirect קשיח ו- path לעוגיה
+    resp = make_response(redirect("/game6/"))
+    resp.set_cookie('user_id', uid, path='/') # מוודא שהקוקי עובד בכל האפליקציה
     return resp
 
 @app.route('/api/update')
@@ -258,7 +253,6 @@ def api_update():
     me = db['players'][uid]
     current_time = time.time()
     
-    # regen
     if current_time - me['last_seen'] > 5:
         regen = ROLES[me['role']]['ap_regen']
         me['ap'] = min(me['max_ap'], me['ap'] + regen)
@@ -294,7 +288,6 @@ def perform_action():
     if me['ap'] < 2: return jsonify({"msg": "❌ אין מספיק אנרגיה!"})
     
     msg = ""
-    # Actions logic (Shortened)
     if action == 'attack' and target:
         dmg = random.randint(10, 20)
         target['hp'] -= dmg
