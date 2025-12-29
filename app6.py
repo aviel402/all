@@ -3,14 +3,16 @@ import uuid
 import time
 import random
 import os
-from flask import Flask, request, render_template_string, redirect, jsonify, make_response, url_for
+from flask import Flask, request, render_template_string, redirect, jsonify, make_response
 
 app = Flask(__name__)
 app.secret_key = "factions_war_secret_key"
 
+# --- הקבוע שיסדר את כל הבעיות ---
+GAME_PATH = "/game6" 
+
 DB_FILE = "factions_db.json"
 
-# --- נתוני עולם ---
 ROLES = {
     "fighter": {"name": "🗡️ לוחם", "hp": 120, "ap_regen": 2, "desc": "תוקף שחקנים וגונב כסף"},
     "merchant": {"name": "💎 סוחר", "hp": 80, "ap_regen": 3, "desc": "מייצר כסף ומבצע עסקאות"},
@@ -20,7 +22,6 @@ ROLES = {
 
 # --- דאטהבייס ---
 def load_db():
-    # בקריאה במקום שאין גישת כתיבה מלאה, נשתמש בזיכרון אם אין קובץ
     if not os.path.exists(DB_FILE):
         return {"players": {}, "city_bank": 500, "logs": []}
     try:
@@ -33,8 +34,7 @@ def save_db(data):
     try:
         with open(DB_FILE, 'w', encoding='utf-8') as f:
             json.dump(data, f, ensure_ascii=False)
-    except:
-        pass # התעלמות משגיאות כתיבה בסביבת Serverless זמנית
+    except: pass
 
 def add_log(db, text):
     import datetime
@@ -42,8 +42,7 @@ def add_log(db, text):
     db['logs'].insert(0, f"[{time_str}] {text}")
     db['logs'] = db['logs'][:50]
 
-# --- HTML תבניות ---
-# שים לב: השימוש ב url_for בתוך ה-HTML הוא הסוד שגורם לזה לעבוד תחת /game6
+# --- HTML ---
 
 LOGIN_HTML = """
 <!DOCTYPE html>
@@ -61,7 +60,8 @@ button { background: #00d4ff; color: #000; font-weight: bold; cursor: pointer; }
 <body>
 <h1>FACTIONS WARS 🌍</h1>
 <div class="card">
-    <form action="{{ url_for('login') }}" method="post">
+    <!-- שימוש בפרמטר base -->
+    <form action="{{ base }}/login" method="post">
         <input type="text" name="username" placeholder="בחר כינוי" required>
         <h3>בחר מעמד:</h3>
         <select name="role">
@@ -73,6 +73,7 @@ button { background: #00d4ff; color: #000; font-weight: bold; cursor: pointer; }
         <button type="submit">היכנס לעולם</button>
     </form>
 </div>
+<a href="/" style="display:block; margin-top:20px; color:#555;">חזרה ללובי</a>
 </body>
 </html>
 """
@@ -88,34 +89,20 @@ body { margin:0; background: #0f0f13; color: #e0e0e0; font-family: 'Segoe UI', s
 .header { background: #1f1f23; padding: 15px; position: sticky; top:0; z-index:100; border-bottom: 2px solid #00d4ff; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 5px 20px rgba(0,0,0,0.5); }
 .stats span { margin-left: 10px; font-weight: bold; }
 .ap { color: #ffd700; } .hp { color: #ff4d4d; } .money { color: #00ff7f; }
-
 .container { max-width: 600px; margin: 0 auto; padding: 10px; }
-
-/* לוג */
 .logs { background: #000; height: 120px; overflow-y: scroll; padding: 10px; border-radius: 8px; border: 1px solid #333; font-size: 13px; font-family: monospace; color: #888; margin-bottom: 20px; }
-.logs div { border-bottom: 1px solid #111; padding: 3px 0; }
-
-/* רשימת שחקנים */
-.player-card { 
-    background: #25252b; margin-bottom: 10px; padding: 15px; border-radius: 10px; 
-    display: flex; justify-content: space-between; align-items: center; border: 1px solid #333;
-}
-.player-info { display: flex; flex-direction: column; }
+.player-card { background: #25252b; margin-bottom: 10px; padding: 15px; border-radius: 10px; display: flex; justify-content: space-between; align-items: center; border: 1px solid #333; }
 .player-name { font-weight: bold; font-size: 16px; color: #fff; }
 .player-role { font-size: 12px; color: #aaa; }
-
-/* כפתורי פעולה */
 .actions { display: flex; gap: 5px; }
 button { border: none; padding: 8px 12px; border-radius: 5px; cursor: pointer; font-weight: bold; transition: 0.2s; }
 .btn-atk { background: #b71c1c; color: white; }
 .btn-tax { background: #1565c0; color: white; }
 .btn-steal { background: #4a148c; color: white; }
 .btn-self { background: #333; color: #aaa; border: 1px solid #555; width: 100%; margin-bottom: 15px; padding: 12px; }
-.back-btn { display:block; text-align:center; margin-top:30px; color: #555; text-decoration:none; }
-
 .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #333; padding: 10px 20px; border-radius: 20px; border: 1px solid #00d4ff; display: none; z-index: 200; box-shadow: 0 0 15px rgba(0,212,255,0.4); }
-
 .bank-info { text-align: center; color: #888; font-size: 12px; margin-top: -15px; margin-bottom: 15px; }
+.back-btn { display:block; text-align:center; color:#555; text-decoration:none; margin-top:20px; }
 </style>
 </head>
 <body>
@@ -139,25 +126,19 @@ button { border: none; padding: 8px 12px; border-radius: 5px; cursor: pointer; f
     <button class="btn-self" onclick="doAction('heal')">💊 קנה תרופה (20$)</button>
 
     <div class="logs" id="log-box">טוען נתונים...</div>
-    
     <div class="bank-info">🏛️ קופת העיר: <span id="city-bank">0</span>$</div>
-
     <div id="players-list"></div>
-    
     <a href="/" class="back-btn">יציאה ללובי</a>
 </div>
 
 <div id="toast" class="toast">הודעה</div>
 
 <script>
-let myRole = "{{ me.role }}";
-
-// כאן הסוד: שימוש ב-url_for בתוך הג'אווהסקריפט כדי לייצר כתובת דינמית
-const UPDATE_URL = "{{ url_for('api_update') }}";
-const ACTION_URL = "{{ url_for('perform_action') }}";
+const BASE_PATH = "{{ base }}"; // הפרמטר מגיע מכאן!
 
 function update() {
-    fetch(UPDATE_URL)
+    // שרשור הקבוע לנתיב ה-API
+    fetch(BASE_PATH + '/api/update')
     .then(r => r.json())
     .then(data => {
         if(data.reload) window.location.reload();
@@ -174,16 +155,12 @@ function update() {
         let playersHtml = "";
         data.players.forEach(p => {
             let actions = "";
+            let myRole = "{{ me.role }}";
             
-            if (myRole === 'fighter') {
-                actions = `<button class="btn-atk" onclick="doAction('attack', '${p.id}')">תקוף</button>`;
-            } else if (myRole === 'manager') {
-                actions = `<button class="btn-tax" onclick="doAction('tax', '${p.id}')">החרם כסף</button>`;
-            } else if (myRole === 'spy') {
-                actions = `<button class="btn-steal" onclick="doAction('steal', '${p.id}')">גנוב</button>`;
-            } else if (myRole === 'merchant') {
-                actions = `<span style='font-size:12px; color:gray'>לקוח פוטנציאלי</span>`;
-            }
+            if (myRole === 'fighter') actions = `<button class="btn-atk" onclick="doAction('attack', '${p.id}')">תקוף</button>`;
+            else if (myRole === 'manager') actions = `<button class="btn-tax" onclick="doAction('tax', '${p.id}')">החרם כסף</button>`;
+            else if (myRole === 'spy') actions = `<button class="btn-steal" onclick="doAction('steal', '${p.id}')">גנוב</button>`;
+            else if (myRole === 'merchant') actions = `<span style='font-size:12px; color:gray'>לקוח</span>`;
 
             let moneyDisplay = myRole === 'spy' ? `<div style="color:gold; font-size:11px">💰 ${p.money}</div>` : '';
 
@@ -198,16 +175,13 @@ function update() {
             </div>`;
         });
         
-        if (data.players.length === 0) {
-            playersHtml = "<div style='text-align:center; padding:20px; color:#555'>מחפש שחקנים אחרים בעיר...</div>";
-        }
-        
+        if (data.players.length === 0) playersHtml = "<div style='text-align:center; padding:20px; color:#555'>העיר שקטה...</div>";
         document.getElementById('players-list').innerHTML = playersHtml;
     });
 }
 
 function doAction(act, targetId = null) {
-    fetch(ACTION_URL, {
+    fetch(BASE_PATH + '/api/action', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({ action: act, target_id: targetId })
@@ -230,7 +204,6 @@ function showToast(msg) {
 setInterval(update, 2000);
 update();
 </script>
-
 </body>
 </html>
 """
@@ -241,11 +214,13 @@ update();
 def home():
     uid = request.cookies.get('user_id')
     db = load_db()
+    
+    # שליחת הפרמטר base לתבנית ה-HTML
     if not uid or uid not in db['players']:
-        return render_template_string(LOGIN_HTML)
+        return render_template_string(LOGIN_HTML, base=GAME_PATH)
     
     player = db['players'][uid]
-    return render_template_string(GAME_HTML, me=player, role_name=ROLES[player['role']]['name'])
+    return render_template_string(GAME_HTML, me=player, role_name=ROLES[player['role']]['name'], base=GAME_PATH)
 
 @app.route('/login', methods=['POST'])
 def login():
@@ -253,7 +228,7 @@ def login():
     role = request.form.get('role')
     
     if not username or role not in ROLES:
-        return "שגיאה בפרטים", 400
+        return "Error", 400
 
     db = load_db()
     uid = str(uuid.uuid4())
@@ -265,10 +240,11 @@ def login():
         "ap": 10, "max_ap": 10, "last_seen": time.time()
     }
     
-    add_log(db, f"✨ {username} הצטרף לעיר בתור {ROLES[role]['name']}.")
+    add_log(db, f"✨ {username} הצטרף ({ROLES[role]['name']}).")
     save_db(db)
     
-    resp = make_response(redirect(url_for('home'))) # שימוש חכם ב-url_for שיפנה חזרה ל-/game6/
+    # הפנייה עם הקידומת
+    resp = make_response(redirect(f"{GAME_PATH}/"))
     resp.set_cookie('user_id', uid)
     return resp
 
@@ -282,19 +258,18 @@ def api_update():
     me = db['players'][uid]
     current_time = time.time()
     
-    # עדכון שחקן
+    # regen
     if current_time - me['last_seen'] > 5:
         regen = ROLES[me['role']]['ap_regen']
         me['ap'] = min(me['max_ap'], me['ap'] + regen)
         me['last_seen'] = current_time
         save_db(db)
 
-    # סינון נתונים לתצוגה
     visible_players = []
     for pid, p in db['players'].items():
         if pid == uid: continue
         if current_time - p['last_seen'] > 60: continue 
-        if p['role'] == 'spy' and me['role'] != 'spy': continue # מרגל נסתר
+        if p['role'] == 'spy' and me['role'] != 'spy': continue 
         
         visible_players.append({
             "id": p['id'], "name": p['name'], "role": p['role'],
@@ -303,33 +278,39 @@ def api_update():
             "money": p['money'] if me['role'] == 'spy' else '???'
         })
 
-    return jsonify({
-        "me": me, "city_bank": db['city_bank'],
-        "players": visible_players, "logs": db['logs']
-    })
+    return jsonify({ "me": me, "city_bank": db['city_bank'], "players": visible_players, "logs": db['logs'] })
 
 @app.route('/api/action', methods=['POST'])
 def perform_action():
     data = request.json
     action = data.get('action')
     target_id = data.get('target_id')
-    
     uid = request.cookies.get('user_id')
     db = load_db()
     me = db['players'].get(uid)
     target = db['players'].get(target_id)
     
-    if not me: return jsonify({"error": "Login Error"})
+    if not me: return jsonify({"error": "No User"})
     if me['ap'] < 2: return jsonify({"msg": "❌ אין מספיק אנרגיה!"})
     
     msg = ""
-    # לוגיקה מקוצרת וקלה להדגמה
+    # Actions logic (Shortened)
     if action == 'attack' and target:
         dmg = random.randint(10, 20)
         target['hp'] -= dmg
         me['ap'] -= 3
-        msg = f"פגעת ב-{target['name']} ({dmg} נזק)!"
+        msg = f"פגעת! ({dmg} נזק)"
         add_log(db, f"⚔️ {me['name']} תקף את {target['name']}.")
-        
     elif action == 'trade':
-        earn = random.randint
+        me['money'] += 30; db['city_bank'] += 5; me['ap'] -= 3
+        msg = "הרווחת כסף!"
+    elif action == 'heal':
+        if me['money']>=20:
+            me['money']-=20; me['hp']+=30
+            msg="נרפאת."
+            
+    save_db(db)
+    return jsonify({"msg": msg})
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000, debug=True)
