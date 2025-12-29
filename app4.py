@@ -223,7 +223,7 @@ def index():
 @app.route('/recruit/<int:amount>')
 def recruit(amount):
     cost = 50 * amount
-    if amount >= 15: cost = 450 # הנחת כמות
+    if amount >= 10: cost = 400 # הנחת כמות
     
     if gameState.money >= cost:
         gameState.money -= cost
