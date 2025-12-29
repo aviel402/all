@@ -171,7 +171,7 @@ HTML_PAGE = """
             <div class="actions">
                 <h4>פעולות:</h4>
                 <a href="/game4/recruit/1"><button>גייס 1 חייל (50$)</button></a>
-                <a href="/game4/recruit/10"><button>גייס 10 חיילים (450$)</button></a>
+                <a href="/game4/recruit/15"><button>גייס 15 חיילים (450$)</button></a>
                 <br><br>
                 <a href="/game4/next_turn"><button class="end-turn">סיים יום (קבל הכנסה) 🌙</button></a>
                 <br>
@@ -222,7 +222,7 @@ def index():
 
 @app.route('/recruit/<int:amount>')
 def recruit(amount):
-    cost = 40 * amount
+    cost = 50 * amount
     if amount >= 10: cost = 450 # הנחת כמות
     
     if gameState.money >= cost:
