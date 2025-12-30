@@ -51,13 +51,7 @@ MENU_HTML = """
         <a href="/game3/" class="card"><span>🚀</span><h2>Genesis</h2><div class="tag">חלל וקבלת החלטות</div></a>
         <a href="/game4/" class="card"><span>🏙️</span><h2>Underworld</h2><div class="tag">כנופיות ועיר</div></a>
         <a href="/game5/" class="card"><span>🛡️</span><h2>Iron Legion</h2><div class="tag">אסטרטגיה וצבא</div></a>
-        <a href="/game6/" class="card"><span>🕵️</span><h2>Factions</h2><div class="tag">רב-משתתפים (סימולציה)</div></a>
-        <a href="/game7/" class="card"><span>⏱️</span><h2>ChronoDaily</h2><div class="tag">אתגר יומי</div></a>
-        <a href="/game8/" class="card"><span>🐲</span><h2>Raid Boss</h2><div class="tag">MMO Boss Fight</div></a>
-        <a href="/game9/" class="card"><span>📉</span><h2>Wall Street</h2><div class="tag">שוק ההון</div></a>
-        <a href="/game10/" class="card"><span>🔩</span><h2>Iron & Dust</h2><div class="tag">בנייה בזמן אמת</div></a>
-        <a href="/game11/" class="card"><span>⚽</span><h2>Manager Pro</h2><div class="tag">ניהול כדורגל</div></a>
-        <a href="/game12/" class="card"><span>💼</span><h2>trade game</h2><div class="tag">תחרות חנויות</div></a>
+
 
     </div>
 </body>
