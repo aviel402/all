@@ -8,13 +8,7 @@ from app2 import app as game2
 from app3 import app as game3
 from app4 import app as game4
 from app5 import app as game5
-from app6 import app as game6
-from app7 import app as game7
-from app8 import app as game8
-from app9 import app as game9
-from app10 import app as game10
-from app11 import app as game11
-from app12 import app as game12
+
 # יצירת אפליקציית "לובי" ראשית
 main_app = Flask(__name__)
 
@@ -29,7 +23,7 @@ MENU_HTML = """
     <style>
         body { background-color: #0f0f13; color: #fff; font-family: 'Segoe UI', sans-serif; text-align: center; margin: 0; padding: 20px; }
         h1 { font-size: 3rem; margin-bottom: 10px; background: -webkit-linear-gradient(#eee, #333); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-        p { color: #888; margin-bottom: 40px; }
+        p { color: #868; margin-bottom: 40px; }
         .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; max-width: 1000px; margin: 0 auto; }
         .card { 
             background: #1f1f23; border: 1px solid #333; padding: 20px; border-radius: 12px; 
@@ -69,14 +63,7 @@ app = DispatcherMiddleware(main_app, {
     '/game2': game2,
     '/game3': game3,
     '/game4': game4,
-    '/game5': game5,
-    '/game6': game6,
-    '/game7': game7,
-    '/game8': game8,
-    '/game9': game9,
-    '/game10': game10,
-    '/game11': game11,
-    '/game12': game12
+    '/game5': game5
 })
 
 if __name__ == "__main__":
