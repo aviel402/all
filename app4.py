@@ -49,7 +49,7 @@ class Game:
         # אויבים מתחזקים! (כל תור הם מוסיפים הגנות)
         for z in self.zones:
             if z["owner"] != "player":
-                growth = random.randint(5, 15)
+                growth = random.randint(3, 13)
                 z["defense"] += growth
         
         # אירוע רנדומלי
@@ -170,7 +170,7 @@ HTML_PAGE = """
             <hr>
             <div class="actions">
                 <h4>פעולות:</h4>
-                <a href="/game4/recruit/1"><button>גייס 1 חייל (50$)</button></a>
+                <a href="/game4/recruit/5"><button>גייס 5 חייל (50$)</button></a>
                 <a href="/game4/recruit/15"><button>גייס 15 חיילים (450$)</button></a>
                 <br><br>
                 <a href="/game4/next_turn"><button class="end-turn">סיים יום (קבל הכנסה) 🌙</button></a>
