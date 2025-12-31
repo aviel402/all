@@ -1,329 +1,203 @@
-import json
-import uuid
-import time
-import random
-import os
-from flask import Flask, request, render_template_string, redirect, jsonify, make_response
+from flask import Flask, request, jsonify, render_template_string
+import random, time, uuid
 
-app = Flask(__name__)
-app.secret_key = "factions_war_secret_key"
+# --- שינוי שם האפליקציה ל-app6 ---
+app6 = Flask(__name__)
 
-# --- תיקון קריטי: נתיב בסיס קבוע ---
-GAME_PATH = "/game6"
+# --- נתונים ומשתנים ---
+BOARD_W, BOARD_H = 800, 600
 
-DB_FILE = "factions_db.json"
-
-# --- נתוני עולם ---
-ROLES = {
-    "fighter": {"name": "🗡️ לוחם", "hp": 120, "ap_regen": 2, "desc": "תוקף שחקנים וגונב כסף"},
-    "merchant": {"name": "💎 סוחר", "hp": 80, "ap_regen": 3, "desc": "מייצר כסף ומבצע עסקאות"},
-    "manager": {"name": "👔 מנהל", "hp": 100, "ap_regen": 1, "desc": "גובה מיסים ושולט בתקציב העיר"},
-    "spy": {"name": "🕵️ מרגל", "hp": 60, "ap_regen": 4, "desc": "בלתי נראה, גונב בשקט"}
+# משתנה המצב (State) ששומר את כל המשחק
+game_state = {
+    'players': {},   
+    'coins': []      
 }
 
-# --- דאטהבייס (עמיד בפני קריסות קריאה) ---
-def load_db():
-    if not os.path.exists(DB_FILE):
-        return {"players": {}, "city_bank": 500, "logs": []}
-    try:
-        with open(DB_FILE, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    except:
-        return {"players": {}, "city_bank": 500, "logs": []}
+# פונקציה ליצירת מטבע חדש
+def spawn_coin():
+    game_state['coins'].append({
+        'id': str(uuid.uuid4()),
+        'x': random.randint(20, BOARD_W - 20),
+        'y': random.randint(20, BOARD_H - 20),
+        'val': 10
+    })
 
-def save_db(data):
-    try:
-        with open(DB_FILE, 'w', encoding='utf-8') as f:
-            json.dump(data, f, ensure_ascii=False)
-    except:
-        pass
+# יצירת 15 מטבעות התחלתיים
+for _ in range(15): spawn_coin()
 
-def add_log(db, text):
-    import datetime
-    time_str = datetime.datetime.now().strftime("%H:%M:%S")
-    db['logs'].insert(0, f"[{time_str}] {text}")
-    db['logs'] = db['logs'][:50]
-
-# --- HTML ---
-
-LOGIN_HTML = """
+# --- ממשק המשחק (HTML/JS) ---
+HTML_GAME = """
 <!DOCTYPE html>
 <html lang="he" dir="rtl">
 <head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Factions - התחברות</title>
-<style>
-body { background: #111; color: white; font-family: sans-serif; text-align: center; padding: 20px; }
-input, select, button { padding: 15px; margin: 10px; width: 80%; border-radius: 8px; border: none; font-size: 18px; }
-button { background: #00d4ff; color: #000; font-weight: bold; cursor: pointer; }
-.card { background: #222; padding: 20px; border-radius: 15px; border: 1px solid #444; max-width: 400px; margin: 0 auto; }
-</style>
+    <meta charset="UTF-8">
+    <title>Super Game 6</title>
+    <style>
+        body { background-color: #121212; color: white; font-family: 'Segoe UI', sans-serif; overflow: hidden; display: flex; flex-direction: column; align-items: center; }
+        #gameCanvas { background: #1a1a1a; border: 2px solid #00ff88; box-shadow: 0 0 25px rgba(0, 255, 136, 0.3); border-radius: 8px; margin-top: 10px; }
+        #ui { position: absolute; top: 10px; width: 800px; display: flex; justify-content: space-between; pointer-events: none; }
+        .score-board { background: rgba(0,0,0,0.6); padding: 10px; border-radius: 8px; font-weight: bold; font-size: 18px; color: #00ff88; pointer-events: auto; border: 1px solid #00ff88; }
+        input { pointer-events: auto; padding: 5px; background: #333; border: 1px solid #555; color: white; border-radius: 4px; }
+        button { pointer-events: auto; cursor: pointer; background: #00ff88; color:black; border: none; padding: 5px 15px; border-radius: 4px; font-weight: bold; transition: 0.2s;}
+        button:hover { background: #00cc6a; transform: scale(1.05); }
+    </style>
 </head>
 <body>
-<h1>FACTIONS WARS 🌍</h1>
-<div class="card">
-    <!-- שימוש במשתנה base בטופס -->
-    <form action="{{ base }}/login" method="post">
-        <input type="text" name="username" placeholder="בחר כינוי" required>
-        <h3>בחר מעמד:</h3>
-        <select name="role">
-            <option value="fighter">🗡️ לוחם (קרבי)</option>
-            <option value="merchant">💎 סוחר (כלכלי)</option>
-            <option value="manager">👔 מנהל (פוליטי)</option>
-            <option value="spy">🕵️ מרגל (התגנבות)</option>
-        </select>
-        <button type="submit">היכנס לעולם</button>
-    </form>
-</div>
-<a href="/" style="display:block; margin-top:20px; color:#555;">חזרה ללובי</a>
-</body>
-</html>
-"""
-
-GAME_HTML = """
-<!DOCTYPE html>
-<html lang="he" dir="rtl">
-<head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Factions Game</title>
-<style>
-body { margin:0; background: #0f0f13; color: #e0e0e0; font-family: 'Segoe UI', sans-serif; padding-bottom: 20px;}
-.header { background: #1f1f23; padding: 15px; position: sticky; top:0; z-index:100; border-bottom: 2px solid #00d4ff; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 5px 20px rgba(0,0,0,0.5); }
-.stats span { margin-left: 10px; font-weight: bold; }
-.ap { color: #ffd700; } .hp { color: #ff4d4d; } .money { color: #00ff7f; }
-.container { max-width: 600px; margin: 0 auto; padding: 10px; }
-.logs { background: #000; height: 120px; overflow-y: scroll; padding: 10px; border-radius: 8px; border: 1px solid #333; font-size: 13px; font-family: monospace; color: #888; margin-bottom: 20px; }
-.player-card { background: #25252b; margin-bottom: 10px; padding: 15px; border-radius: 10px; display: flex; justify-content: space-between; align-items: center; border: 1px solid #333; }
-.player-info { display: flex; flex-direction: column; }
-.player-name { font-weight: bold; font-size: 16px; color: #fff; }
-.player-role { font-size: 12px; color: #aaa; }
-.actions { display: flex; gap: 5px; }
-button { border: none; padding: 8px 12px; border-radius: 5px; cursor: pointer; font-weight: bold; transition: 0.2s; }
-.btn-atk { background: #b71c1c; color: white; }
-.btn-tax { background: #1565c0; color: white; }
-.btn-steal { background: #4a148c; color: white; }
-.btn-self { background: #333; color: #aaa; border: 1px solid #555; width: 100%; margin-bottom: 15px; padding: 12px; }
-.back-btn { display:block; text-align:center; margin-top:30px; color: #555; text-decoration:none; }
-.toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #333; padding: 10px 20px; border-radius: 20px; border: 1px solid #00d4ff; display: none; z-index: 200; box-shadow: 0 0 15px rgba(0,212,255,0.4); }
-.bank-info { text-align: center; color: #888; font-size: 12px; margin-top: -15px; margin-bottom: 15px; }
-</style>
-</head>
-<body>
-
-<div class="header">
-    <div style="font-weight:900; font-size:18px;">{{ me.name }}</div>
-    <div class="stats">
-        <span class="hp">❤️ <span id="val-hp">{{ me.hp }}</span></span>
-        <span class="ap">⚡ <span id="val-ap">{{ me.ap }}</span></span>
-        <span class="money">💵 <span id="val-money">{{ me.money }}</span></span>
+    <div id="ui">
+        <div>
+            שם: <input id="pName" value="שחקן6" style="width:80px;">
+            <select id="pEmoji" style="background:#333;color:white;border:none;">
+                <option>👽</option><option>🤠</option><option>👻</option><option>🤖</option><option>🐵</option><option>😈</option>
+            </select>
+            <button onclick="joinGame()">כנס למשחק</button>
+        </div>
+        <div class="score-board">💰 נקודות: <span id="myScore">0</span> | מלך השרת: <span id="topPlayer"></span></div>
     </div>
-</div>
-
-<div class="container">
-    <div style="text-align: center; color: #aaa; font-size: 14px; margin: 10px 0;">אתה משחק בתור: <b>{{ role_name }}</b></div>
     
-    {% if me.role == 'merchant' %}
-        <button class="btn-self" onclick="doAction('trade')" style="background: #1b5e20; color: #fff; border: 1px solid #66bb6a;">⚖️ בצע עסקת מסחר (הכנסה)</button>
-    {% endif %}
-    
-    <button class="btn-self" onclick="doAction('heal')">💊 קנה תרופה (20$)</button>
-
-    <div class="logs" id="log-box">טוען נתונים...</div>
-    <div class="bank-info">🏛️ קופת העיר: <span id="city-bank">0</span>$</div>
-    <div id="players-list"></div>
-    <a href="/" class="back-btn">יציאה ללובי</a>
-</div>
-
-<div id="toast" class="toast">הודעה</div>
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
 
 <script>
-// המפתח: קבלת הנתיב הבסיסי מפייתון
-const BASE = "{{ base }}";
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    let myId = localStorage.getItem('pid') || 'user_' + Math.floor(Math.random()*9999);
+    localStorage.setItem('pid', myId);
 
-function update() {
-    // שרשור הנתיב לכתובות ה-API
-    fetch(BASE + '/api/update')
-    .then(r => r.json())
-    .then(data => {
-        if(data.reload) window.location.reload();
-        
-        document.getElementById('val-hp').innerText = data.me.hp;
-        document.getElementById('val-ap').innerText = data.me.ap;
-        document.getElementById('val-money').innerText = data.me.money;
-        document.getElementById('city-bank').innerText = data.city_bank;
+    let myPos = { x: 400, y: 300 };
+    let speed = 6; // מהירות 6 כמובן :)
+    let keys = {};
+    let gameState = { players: {}, coins: [] };
+    let joined = false;
 
-        let logsHtml = "";
-        data.logs.forEach(l => logsHtml += `<div>${l}</div>`);
-        document.getElementById('log-box').innerHTML = logsHtml;
+    window.addEventListener('keydown', e => keys[e.key] = true);
+    window.addEventListener('keyup', e => keys[e.key] = false);
 
-        let playersHtml = "";
-        data.players.forEach(p => {
-            let actions = "";
-            let myRole = "{{ me.role }}";
-            
-            if (myRole === 'fighter') actions = `<button class="btn-atk" onclick="doAction('attack', '${p.id}')">תקוף</button>`;
-            else if (myRole === 'manager') actions = `<button class="btn-tax" onclick="doAction('tax', '${p.id}')">החרם כסף</button>`;
-            else if (myRole === 'spy') actions = `<button class="btn-steal" onclick="doAction('steal', '${p.id}')">גנוב</button>`;
-            else if (myRole === 'merchant') actions = `<span style='font-size:12px; color:gray'>לקוח</span>`;
+    function joinGame() {
+        joined = true;
+        document.querySelector('button').disabled = true;
+        document.querySelector('button').innerText = "משחק פעיל...";
+    }
 
-            let moneyDisplay = myRole === 'spy' ? `<div style="color:gold; font-size:11px">💰 ${p.money}</div>` : '';
+    function gameLoop() {
+        if(joined) {
+            if((keys['ArrowUp'] || keys['w']) && myPos.y > 0) myPos.y -= speed;
+            if((keys['ArrowDown'] || keys['s']) && myPos.y < 600) myPos.y += speed;
+            if((keys['ArrowLeft'] || keys['a']) && myPos.x > 0) myPos.x -= speed;
+            if((keys['ArrowRight'] || keys['d']) && myPos.x < 800) myPos.x += speed;
+        }
 
-            playersHtml += `
-            <div class="player-card">
-                <div class="player-info">
-                    <div class="player-name">${p.role_icon} ${p.name}</div>
-                    <div class="player-role">❤️ ${p.hp} | ${p.role}</div>
-                    ${moneyDisplay}
-                </div>
-                <div class="actions">${actions}</div>
-            </div>`;
+        // שליחת מידע לשרת
+        fetch('/update', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                id: myId, x: myPos.x, y: myPos.y,
+                name: document.getElementById('pName').value,
+                emoji: document.getElementById('pEmoji').value,
+                active: joined
+            })
+        }).then(r => r.json()).then(data => {
+            gameState = data;
+            if (gameState.players[myId]) {
+                document.getElementById('myScore').innerText = gameState.players[myId].score;
+            }
         });
-        
-        if (data.players.length === 0) playersHtml = "<div style='text-align:center; padding:20px; color:#555'>העיר שקטה... (חכה לשחקנים נוספים)</div>";
-        document.getElementById('players-list').innerHTML = playersHtml;
-    });
-}
 
-function doAction(act, targetId = null) {
-    fetch(BASE + '/api/action', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ action: act, target_id: targetId })
-    })
-    .then(r => r.json())
-    .then(res => {
-        if(res.error) alert(res.error);
-        if(res.msg) showToast(res.msg);
-        update(); 
-    });
-}
+        draw();
+        requestAnimationFrame(gameLoop);
+    }
 
-function showToast(msg) {
-    let t = document.getElementById('toast');
-    t.innerText = msg;
-    t.style.display = 'block';
-    setTimeout(() => { t.style.display = 'none'; }, 3000);
-}
+    function draw() {
+        // רקע שחור מגניב
+        ctx.fillStyle = '#0f0f0f';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-setInterval(update, 2000);
-update();
+        // קווים ברקע
+        ctx.strokeStyle = '#1f1f1f';
+        ctx.beginPath();
+        for(let i=0; i<800; i+=50) { ctx.moveTo(i,0); ctx.lineTo(i,600); }
+        for(let j=0; j<600; j+=50) { ctx.moveTo(0,j); ctx.lineTo(800,j); }
+        ctx.stroke();
+
+        // ציור המטבעות
+        gameState.coins.forEach(c => {
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = "yellow";
+            ctx.font = "24px Arial";
+            ctx.fillText("🪙", c.x - 12, c.y + 10);
+            ctx.shadowBlur = 0;
+        });
+
+        let maxScore = -1; let leader = "אף אחד";
+
+        // ציור השחקנים
+        for (let pid in gameState.players) {
+            const p = gameState.players[pid];
+            if(p.score > maxScore) { maxScore = p.score; leader = p.name; }
+            
+            // עיגול רקע לשחקן
+            ctx.fillStyle = (pid === myId) ? "rgba(0, 255, 136, 0.2)" : "rgba(255, 255, 255, 0.1)";
+            ctx.beginPath(); ctx.arc(p.x, p.y - 5, 25, 0, Math.PI*2); ctx.fill();
+
+            // האימוג'י
+            ctx.font = "34px Arial";
+            ctx.textAlign = "center";
+            ctx.fillText(p.emoji, p.x, p.y + 8);
+            
+            // שם וניקוד
+            ctx.fillStyle = "#bbb";
+            ctx.font = "12px sans-serif";
+            ctx.fillText(p.name + " (" + p.score + ")", p.x, p.y - 35);
+        }
+        document.getElementById('topPlayer').innerText = leader + " (" + maxScore + ")";
+    }
+
+    gameLoop();
 </script>
 </body>
 </html>
 """
 
-# --- צד השרת ---
+# --- הנתיבים (Routes) הוגדרו תחת app6 ---
 
-@app.route('/')
+@app6.route('/')
 def home():
-    uid = request.cookies.get('user_id')
-    db = load_db()
-    
-    # שולח את משתנה הבסיס גם למסך הכניסה
-    if not uid or uid not in db['players']:
-        return render_template_string(LOGIN_HTML, base=GAME_PATH)
-    
-    player = db['players'][uid]
-    return render_template_string(GAME_HTML, me=player, role_name=ROLES[player['role']]['name'], base=GAME_PATH)
+    return render_template_string(HTML_GAME)
 
-@app.route('/login', methods=['POST'])
-def login():
-    username = request.form.get('username')
-    role = request.form.get('role')
-    
-    if not username or role not in ROLES:
-        return "שגיאה בפרטים", 400
-
-    db = load_db()
-    uid = str(uuid.uuid4())
-    
-    db['players'][uid] = {
-        "id": uid, "name": username, "role": role,
-        "money": 100 if role != 'manager' else 1000,
-        "hp": ROLES[role]['hp'], "max_hp": ROLES[role]['hp'],
-        "ap": 10, "max_ap": 10, "last_seen": time.time()
-    }
-    
-    add_log(db, f"✨ {username} הצטרף לעיר ({ROLES[role]['name']}).")
-    save_db(db)
-    
-    # תיקון קריטי: 1. הפנייה קשיחה ל-/game6 2. הגדרת נתיב העוגייה ל-/
-    resp = make_response(redirect(f"{GAME_PATH}/"))
-    resp.set_cookie('user_id', uid, path='/') 
-    return resp
-
-@app.route('/api/update')
-def api_update():
-    uid = request.cookies.get('user_id')
-    db = load_db()
-    
-    if not uid or uid not in db['players']: return jsonify({"reload": True})
-    
-    me = db['players'][uid]
-    current_time = time.time()
-    
-    if current_time - me['last_seen'] > 5:
-        regen = ROLES[me['role']]['ap_regen']
-        me['ap'] = min(me['max_ap'], me['ap'] + regen)
-        me['last_seen'] = current_time
-        save_db(db)
-
-    visible_players = []
-    for pid, p in db['players'].items():
-        if pid == uid: continue
-        if current_time - p['last_seen'] > 60: continue 
-        if p['role'] == 'spy' and me['role'] != 'spy': continue 
-        
-        visible_players.append({
-            "id": p['id'], "name": p['name'], "role": p['role'],
-            "role_icon": ROLES[p['role']]['name'].split(' ')[0],
-            "hp": p['hp'],
-            "money": p['money'] if me['role'] == 'spy' else '???'
-        })
-
-    return jsonify({ "me": me, "city_bank": db['city_bank'], "players": visible_players, "logs": db['logs'] })
-
-@app.route('/api/action', methods=['POST'])
-def perform_action():
+@app6.route('/update', methods=['POST'])
+def update_game():
     data = request.json
-    action = data.get('action')
-    target_id = data.get('target_id')
-    uid = request.cookies.get('user_id')
-    db = load_db()
-    me = db['players'].get(uid)
-    target = db['players'].get(target_id)
+    uid = data['id']
     
-    if not me: return jsonify({"error": "No User"})
-    if me['ap'] < 2: return jsonify({"msg": "❌ אין מספיק אנרגיה!"})
-    
-    msg = ""
-    if action == 'attack' and target:
-        dmg = random.randint(10, 20)
-        target['hp'] -= dmg
-        me['ap'] -= 3
-        msg = f"פגעת! ({dmg} נזק)"
-        add_log(db, f"⚔️ {me['name']} תקף את {target['name']}.")
-    elif action == 'trade':
-        me['money'] += 30; db['city_bank'] += 5; me['ap'] -= 3
-        msg = "הרווחת כסף!"
-    elif action == 'tax' and target:
-        amt = int(target['money'] * 0.3)
-        target['money'] -= amt; db['city_bank'] += amt; me['ap'] -= 5
-        msg = f"גבית מס {amt}$"
-        add_log(db, f"הוחרם מס מ{target['name']}")
-    elif action == 'steal' and target:
-        if random.random()>0.5:
-            stolen = int(target['money']*0.3)
-            target['money']-=stolen; me['money']+=stolen; msg=f"גנבת {stolen}!"
-        else: me['hp']-=10; msg="נתפסת!"
-        me['ap'] -= 4
-    elif action == 'heal':
-        if me['money']>=20:
-            me['money']-=20; me['hp']+=30
-            msg="נרפאת."
-            
-    save_db(db)
-    return jsonify({"msg": msg})
+    # עדכון שחקן
+    if data['active']:
+        current_score = game_state['players'].get(uid, {}).get('score', 0)
+        game_state['players'][uid] = {
+            'x': data['x'],
+            'y': data['y'],
+            'name': data['name'],
+            'emoji': data['emoji'],
+            'score': current_score,
+            'last_seen': time.time()
+        }
+
+    # מחיקת שחקנים לא פעילים (יותר מ-6 שניות...)
+    now = time.time()
+    for pid in list(game_state['players'].keys()):
+        if now - game_state['players'][pid]['last_seen'] > 6:
+            del game_state['players'][pid]
+
+    # בדיקת איסוף מטבעות
+    player = game_state['players'].get(uid)
+    if player:
+        for coin in game_state['coins'][:]:
+            # בדיקת מרחק פשוטה
+            if abs(player['x'] - coin['x']) < 35 and abs(player['y'] - coin['y']) < 35:
+                player['score'] += coin['val']
+                game_state['coins'].remove(coin)
+                spawn_coin() # יצירת מטבע חדש
+
+    return jsonify(game_state)
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    # הרצה עם app6
+    app6.run(host='0.0.0.0', port=5000, threaded=True, debug=True)
