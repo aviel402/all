@@ -8,7 +8,7 @@ from app2 import app as game2
 from app3 import app as game3
 from app4 import app as game4
 from app5 import app as game5
-from app6 import app as game6
+from app6 import app6 as game6
 
 # יצירת אפליקציית "לובי" ראשית
 main_app = Flask(__name__)
