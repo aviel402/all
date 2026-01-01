@@ -8,7 +8,6 @@ from app2 import app as game2
 from app3 import app as game3
 from app4 import app as game4
 from app5 import app as game5
-from app6 import app6 as game6
 
 # יצירת אפליקציית "לובי" ראשית
 main_app = Flask(__name__)
@@ -38,7 +37,7 @@ MENU_HTML = """
 </head>
 <body>
     <h1>🕹️ ARCADE STATION</h1>
-    <p>בחר משחק כדי להתחיל</p>
+    <p>בחר משחק</p>
     
     <div class="grid">
         <a href="/game1/" class="card"><span>🏝️</span><h2>הישרדות</h2><div class="tag">ניהול משאבים</div></a>
@@ -46,7 +45,6 @@ MENU_HTML = """
         <a href="/game3/" class="card"><span>🚀</span><h2>Genesis</h2><div class="tag">חלל וקבלת החלטות</div></a>
         <a href="/game4/" class="card"><span>🏙️</span><h2>Underworld</h2><div class="tag">כנופיות ועיר</div></a>
         <a href="/game5/" class="card"><span>🛡️</span><h2>Iron Legion</h2><div class="tag">אסטרטגיה וצבא</div></a>
-        <a href="/game6/" class="card"><span>6</span><h2>6</h2><div class="tag">6</div></a>
 
 
     </div>
@@ -65,8 +63,7 @@ app = DispatcherMiddleware(main_app, {
     '/game2': game2,
     '/game3': game3,
     '/game4': game4,
-    '/game5': game5,
-    '/game6': game6
+    '/game5': game5
 
 })
 
