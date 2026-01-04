@@ -6,8 +6,8 @@ import random
 # ==========================================
 # הגדרות מנוע AI (כאן תחליט אם להשתמש בחיקוי או באמיתי)
 # ==========================================
-USE_REAL_AI = False  # שנה ל-True אם יש לך מפתח של OpenAI
-OPENAI_API_KEY = "sk-..." # הכנס את המפתח שלך כאן
+USE_REAL_AI = True  # שנה ל-True אם יש לך מפתח של OpenAI
+OPENAI_API_KEY = "AIzaSyDOXGXKRgzSVtiE-lSFe8V8daIzH83OdI4" # הכנס את המפתח שלך כאן
 
 app = Flask(__name__)
 app.secret_key = 'shadow_maze_secret_key'
