@@ -17,7 +17,7 @@ app.secret_key = 'shadow_maze_secret_key'
 # ==========================================
 # 🛑 כאן מדביקים את המפתח שלך 🛑
 # ==========================================
-MY_OPENAI_KEY = "sk-..."  # <--- תמחוק את זה ותדביק את המפתח הארוך שלך כאן במרכאות
+MY_OPENAI_KEY = "AIzaSyDOXGXKRgzSVtiE-lSFe8V8daIzH83OdI4"  # <--- תמחוק את זה ותדביק את המפתח הארוך שלך כאן במרכאות
 
 # הגדרת הלקוח
 client = None
