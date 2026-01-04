@@ -1,193 +1,475 @@
-from flask import Flask, render_template_string, request, session, redirect, url_for
+from flask import Flask, render_template_string, request, jsonify, session
 import json
+import uuid
 
 app = Flask(__name__)
-app.secret_key = 'super_secret_key_for_game_session'  # נדרש כדי לשמור מידע בין רענוני דף
+app.secret_key = 'ultra_secret_pro_key'
 
-# --- נתונים (אותו הדבר כמו קודם) ---
-WORLD_DATA = {
-    "start_cave": {
-        "name": "מערת ההתחלה החשוכה",
-        "description": "אתה מתעורר בקור, רטוב. אור עמום מגיע מפתח צר.",
-        "exits": {"out": "forest_edge"},
-        "items": ["old_bandage"],
-        "npc": None
+# ==========================================
+# 1. דאטה: העולם, החפצים והחוקים (Data Layer)
+# ==========================================
+GAME_DATA = {
+    "start_room": "cell",
+    "rooms": {
+        "cell": {
+            "name": "תא כלא מעופש",
+            "desc": "קירות האבן סוגרים עליך. יש דלת ברזל נעולה מדרום. על הרצפה יש קש.",
+            "exits": {"south": "corridor"},
+            "items": ["rusted_spoon"],
+            "interactables": {
+                "door": {"desc": "דלת ברזל כבדה. היא נעולה.", "locked": True, "key": "guard_key"}
+            }
+        },
+        "corridor": {
+            "name": "מסדרון האבן",
+            "desc": "מסדרון ארוך וחשוך. אתה רואה לפיד כבוי על הקיר.",
+            "exits": {"north": "cell", "east": "armory"},
+            "items": ["torch"],
+            "enemies": ["guard"]
+        },
+        "armory": {
+            "name": "נשקייה",
+            "desc": "חדר מלא בנשקים ישנים. רובם שבורים, אך אחד נראה שמיש.",
+            "exits": {"west": "corridor"},
+            "items": ["sword", "shield"]
+        }
     },
-    "forest_edge": {
-        "name": "קצה היער המעורפל",
-        "description": "האוויר כאן כבד. אתה שומע יללות חלשות.",
-        "exits": {"cave": "start_cave"},
-        "items": ["sharp_stone"],
-        "npc": "wounded_wolf"
+    "items": {
+        "rusted_spoon": {"name": "כף חלודה", "desc": "לא יעיל כנשק, אבל אולי אפשר לחפור איתו?"},
+        "guard_key": {"name": "מפתח השומר", "desc": "מפתח כבד מברזל."},
+        "sword": {"name": "חרב קצרה", "desc": "חדה מספיק כדי לחתוך.", "damage": 10},
+        "torch": {"name": "לפיד", "desc": "עשוי להאיר מקומות חשוכים."},
+        "shield": {"name": "מגן עץ", "desc": "טוב להגנה בסיסית."}
+    },
+    "enemies": {
+        "guard": {
+            "name": "שומר רדום",
+            "desc": "הוא יושב על שרפרף, מנמנם. חגורה עם מפתח תלויה עליו.",
+            "hp": 20,
+            "damage": 5,
+            "loot": "guard_key",
+            "status": "alive"
+        }
     }
 }
 
-NPC_DATA = {
-    "wounded_wolf": {
-        "name": "זאב פצוע",
-        "description": "זאב גדול שוכב מולך, רגלו מדממת.",
-        "options": [
-            {"cmd": "heal", "desc": "רפא את הזאב (heal)", "req": "old_bandage"},
-            {"cmd": "ignore", "desc": "התעלם (ignore)"}
-        ]
-    }
-}
+# ==========================================
+# 2. מנוע המשחק (Logic Engine)
+# ==========================================
 
-# --- לוגיקה שמותאמת ל-WEB ---
-
-def get_initial_state():
-    return {
-        "current_location_id": "start_cave",
-        "inventory": [],
-        "flags": {},
-        "log": ["התעוררת בעולם חדש..."],  # יומן אירועים שמוצג על המסך
-        "turn": 0
-    }
-
-def process_command(state, command):
-    """
-    מקבל את המצב הנוכחי ופקודה, מחזיר טקסט לתצוגה ומעדכן את המצב.
-    """
-    cmd_parts = command.lower().strip().split()
-    if not cmd_parts: return "לא כתבת כלום."
-    
-    action = cmd_parts[0]
-    target = cmd_parts[1] if len(cmd_parts) > 1 else None
-    
-    current_loc = WORLD_DATA[state['current_location_id']]
-    output = ""
-
-    # תנועה
-    if action in ["go", "move"]:
-        if target in current_loc["exits"]:
-            state['current_location_id'] = current_loc["exits"][target]
-            new_loc = WORLD_DATA[state['current_location_id']]
-            output = f"הלכת ל-{new_loc['name']}."
+class GameEngine:
+    def __init__(self, state=None):
+        if state:
+            self.state = state
         else:
-            output = "אי אפשר ללכת לשם."
+            self.state = {
+                "loc": GAME_DATA["start_room"],
+                "inv": [],
+                "hp": 30,
+                "flags": {}, # לשמירת דברים כמו "דלת נפתחה"
+                "log": []
+            }
 
-    # לקיחת חפצים
-    elif action in ["take", "get"]:
-        if target in current_loc["items"]:
-            state['inventory'].append(target)
-            # בהדגמה פשוטה זו אנחנו לא מוחקים מהדאטה הגלובלי כדי לא להרוס לאחרים
-            # במשחק אמיתי מעתיקים את ה-World Data לתוך ה-Session
-            output = f"לקחת את {target}."
+    def get_room(self):
+        return GAME_DATA["rooms"][self.state["loc"]]
+
+    def add_log(self, text, type="neutral"):
+        self.state["log"].append({"text": text, "type": type})
+
+    def process(self, raw_input):
+        parts = raw_input.strip().lower().split()
+        if not parts: return self.state
+
+        cmd = parts[0]
+        arg = parts[1] if len(parts) > 1 else None
+
+        # מילון פקודות לשיפור קריאות הקוד
+        commands = {
+            "go": self._cmd_move, "walk": self._cmd_move, "לך": self._cmd_move,
+            "take": self._cmd_take, "get": self._cmd_take, "קח": self._cmd_take,
+            "look": self._cmd_look, "examine": self._cmd_look, "הסתכל": self._cmd_look,
+            "inv": self._cmd_inv, "i": self._cmd_inv, "תיק": self._cmd_inv,
+            "use": self._cmd_use, "attack": self._cmd_attack, "השתמש": self._cmd_use, "תקוף": self._cmd_attack
+        }
+
+        if cmd in commands:
+            commands[cmd](arg)
         else:
-            output = "אין כאן את החפץ הזה."
+            self.add_log("פקודה לא מזוהה.", "error")
+        
+        return self.state
 
-    # אינטראקציה פשוטה (hardcoded לצורך הדגמה)
-    elif action == "heal" and state['current_location_id'] == "forest_edge":
-        if "old_bandage" in state['inventory']:
-            state['inventory'].remove("old_bandage")
-            state['flags']['wolf_friend'] = True
-            output = "השתמשת בתחבושת. הזאב מלקק את ידך ומדדה משם."
+    # --- פונקציות עזר לפקודות ---
+
+    def _cmd_move(self, direction):
+        room = self.get_room()
+        
+        # תרגום כיוונים
+        trans = {"north": "north", "צפון": "north", "south": "south", "דרום": "south", 
+                 "east": "east", "מזרח": "east", "west": "west", "מערב": "west"}
+        direction = trans.get(direction, direction)
+
+        if direction in room["exits"]:
+            target_id = room["exits"][direction]
+            target_room = GAME_DATA["rooms"][target_id]
+            
+            # בדיקה האם יש נעילה (לוגיקה של דלתות)
+            origin_interactables = room.get("interactables", {})
+            # אם מנסים ללכת דרומה והדלת בדרום נעולה (לצורך הפשטות נניח שהדלת הראשית היא החסם)
+            # לוגיקה חכמה תהיה לבדוק איזה Link חסום, כאן נבדוק אם יש דלת בחדר שהיא locked
+            door = origin_interactables.get("door") 
+            if door and door.get("locked") and direction == "south": # הארדקוד להדגמה
+                 self.add_log("הדרך חסומה. הדלת נעולה.", "warning")
+                 return
+
+            # בדיקה אם יש אויב חי בחדר שחוסם מעבר
+            if "enemies" in room:
+                for enemy_id in room["enemies"]:
+                    enemy = GAME_DATA["enemies"][enemy_id]
+                    # בודקים במצב הגלובלי אם האויב מת
+                    enemy_dead = self.state["flags"].get(f"{enemy_id}_dead", False)
+                    if not enemy_dead:
+                         self.add_log(f"ה{enemy['name']} חוסם את דרכך!", "danger")
+                         return
+
+            self.state["loc"] = target_id
+            self.add_log(f"הלכת ל{target_room['name']}.", "success")
+            self._cmd_look(None)
         else:
-            output = "אין לך תחבושת!"
+            self.add_log("אי אפשר ללכת לשם.", "warning")
 
-    elif action == "inv":
-        output = f"בתיק שלך: {', '.join(state['inventory'])}"
+    def _cmd_take(self, item_name):
+        room = self.get_room()
+        
+        # תרגום חופשי
+        translation = {"spoon": "rusted_spoon", "כף": "rusted_spoon", "key": "guard_key", "מפתח": "guard_key", 
+                       "sword": "sword", "חרב": "sword", "shield": "shield", "מגן": "shield"}
+        item_id = translation.get(item_name, item_name)
+
+        if item_id in room.get("items", []):
+            self.state["inv"].append(item_id)
+            room["items"].remove(item_id) # זה מסיר רק בזיכרון של הבקשה הזו - צריך טיפול במערכת Persistent אמיתית
+            # *הערה*: בקוד מלא, צריך לשמור את השינויים בעולם ב-state.flags או state.world_changes
+            self.state["flags"][f"took_{item_id}_{self.state['loc']}"] = True # סימון שנלקח
+            
+            item_data = GAME_DATA["items"][item_id]
+            self.add_log(f"לקחת: {item_data['name']}.", "success")
+        else:
+            self.add_log("אין כאן את זה.", "warning")
+
+    def _cmd_look(self, target):
+        room = self.get_room()
+        
+        if not target:
+            # תיאור חדר כללי
+            self.add_log(f"--- {room['name']} ---", "info")
+            self.add_log(room["desc"])
+            
+            # הצגת חפצים שלא נלקחו (נבדוק גם ב-flags אם לקחנו כבר)
+            items_here = [item for item in room.get("items", []) if not self.state["flags"].get(f"took_{item}_{self.state['loc']}")]
+            if items_here:
+                names = [GAME_DATA["items"][i]["name"] for i in items_here]
+                self.add_log(f"חפצים: {', '.join(names)}", "highlight")
+
+            # הצגת אויבים
+            if "enemies" in room:
+                for en_id in room["enemies"]:
+                    if not self.state["flags"].get(f"{en_id}_dead"):
+                        en = GAME_DATA["enemies"][en_id]
+                        self.add_log(f"אויב: {en['name']} ({en['desc']})", "danger")
+            
+            # יציאות
+            self.add_log(f"יציאות: {', '.join(room['exits'].keys())}")
+        
+        else:
+            # כאן תוסיף בדיקת חפצים ספציפית
+            self.add_log(f"אתה מסתכל על {target} אבל לא רואה משהו מיוחד.")
+
+    def _cmd_inv(self, arg):
+        if not self.state["inv"]:
+            self.add_log("התיק שלך ריק.")
+            return
+        
+        item_names = [GAME_DATA["items"][i]["name"] for i in self.state["inv"]]
+        self.add_log(f"מלאי: {', '.join(item_names)}", "highlight")
+
+    def _cmd_use(self, arg):
+        # טיפול מורכב ב"Use key" וכדומה
+        room = self.get_room()
+        
+        # לוגיקה לפתיחת דלתות
+        if arg in ["key", "מפתח"] and "guard_key" in self.state["inv"]:
+            if "door" in room.get("interactables", {}) and room["interactables"]["door"]["locked"]:
+                room["interactables"]["door"]["locked"] = False
+                self.add_log("הכנסת את המפתח... קליק! הדלת נפתחה.", "success")
+                self.state["flags"]["door_unlocked"] = True
+            else:
+                self.add_log("אין כאן דלת נעולה שאפשר לפתוח.")
+        else:
+            self.add_log(f"אי אפשר להשתמש בזה כאן.")
+
+    def _cmd_attack(self, target):
+        room = self.get_room()
+        # מציאת אויב בחדר
+        target_enemy_id = None
+        if "enemies" in room:
+            # לקיחת האויב הראשון לצורך הדגמה
+             target_enemy_id = room["enemies"][0]
+
+        if target_enemy_id:
+            enemy = GAME_DATA["enemies"][target_enemy_id]
+            if self.state["flags"].get(f"{target_enemy_id}_dead"):
+                self.add_log("הוא כבר מת.")
+                return
+
+            player_dmg = 2
+            if "sword" in self.state["inv"]: player_dmg = 10
+            elif "spoon" in self.state["inv"]: player_dmg = 3
+
+            # הורדת חיים לאויב (דורש ניהול State לאויבים, נעשה הדמיה)
+            current_hp = enemy["hp"] - self.state["flags"].get(f"{target_enemy_id}_dmg", 0)
+            current_hp -= player_dmg
+            self.state["flags"][f"{target_enemy_id}_dmg"] = self.state["flags"].get(f"{target_enemy_id}_dmg", 0) + player_dmg
+
+            self.add_log(f"תקפת את {enemy['name']} וגרמת {player_dmg} נזק!", "success")
+
+            if current_hp <= 0:
+                self.state["flags"][f"{target_enemy_id}_dead"] = True
+                self.add_log(f"ניצחת! {enemy['name']} נפל ארצה. נפל ממנו: {GAME_DATA['items'][enemy['loot']]['name']}", "success")
+                room["items"].append(enemy['loot']) # הפלה לרצפה
+            else:
+                # האויב תוקף חזרה
+                self.state["hp"] -= enemy["damage"]
+                self.add_log(f"{enemy['name']} תוקף אותך! נפגעת ב-{enemy['damage']}. חיים: {self.state['hp']}", "danger")
+        else:
+            self.add_log("אין את מי לתקוף כאן.")
+
+
+# ==========================================
+# 3. ממשק משתמש ושרת (Frontend & Routes)
+# ==========================================
+
+@app.route("/")
+def index():
+    if "uid" not in session:
+        session["uid"] = str(uuid.uuid4())
+    return render_template_string(HTML_TEMPLATE)
+
+@app.route("/api/command", methods=["POST"])
+def api_command():
+    data = request.json
+    cmd = data.get("command")
     
-    else:
-        output = "פקודה לא מזוהה. נסה: go [kivun], take [item], heal, inv."
+    # שליפת המצב מהסשן
+    state = session.get("game_state", None)
+    
+    # יצירת המנוע
+    engine = GameEngine(state)
+    
+    # אם זו התחלה, נאתחל את התצוגה
+    if not state and not cmd:
+        engine._cmd_look(None)
+    elif cmd:
+        # הרצת פקודה
+        engine.process(cmd)
+    
+    # שמירת מצב ועדכון לקוח
+    session["game_state"] = engine.state
+    return jsonify({
+        "log": engine.state["log"][-5:], # מחזיר רק את השורות האחרונות לעדכון מהיר
+        "full_log": engine.state["log"],
+        "hp": engine.state["hp"],
+        "loc_name": GAME_DATA["rooms"][engine.state["loc"]]["name"]
+    })
 
-    return output
+@app.route("/api/reset", methods=["POST"])
+def api_reset():
+    session.clear()
+    return jsonify({"status": "ok"})
 
-# --- ה-View (דפי ה-HTML) ---
-
-# תבנית HTML פשוטה בתוך הקוד (כדי שיהיה קל להעתיק)
+# ממשק ה-Web המעוצב (CSS+JS)
 HTML_TEMPLATE = """
-<!doctype html>
-<html dir="rtl" lang="he">
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
 <head>
-    <title>הרפתקה בטקסט</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>מבוך הצללים</title>
     <style>
-        body { font-family: sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; background: #222; color: #eee; }
-        .log { background: #333; padding: 10px; height: 300px; overflow-y: scroll; border: 1px solid #555; margin-bottom: 20px;}
-        .info { border-bottom: 1px solid #777; padding-bottom: 10px; margin-bottom: 10px; }
-        input[type="text"] { width: 70%; padding: 10px; font-size: 16px;}
-        input[type="submit"] { width: 25%; padding: 10px; font-size: 16px; cursor: pointer; background: #d35400; color: white; border: none;}
-        .highlight { color: #f39c12; }
+        :root {
+            --bg-color: #0d1117;
+            --text-color: #c9d1d9;
+            --highlight: #58a6ff;
+            --danger: #f85149;
+            --success: #3fb950;
+            --input-bg: #161b22;
+        }
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+        .container {
+            width: 100%;
+            max-width: 900px;
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        header {
+            border-bottom: 1px solid #30363d;
+            padding-bottom: 10px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        h1 { margin: 0; font-size: 1.5rem; color: var(--highlight); }
+        .stats { font-size: 0.9rem; }
+        
+        #game-log {
+            flex-grow: 1;
+            overflow-y: auto;
+            background: #111;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #30363d;
+            font-family: 'Consolas', monospace;
+            line-height: 1.6;
+        }
+        
+        .entry { margin-bottom: 10px; animation: fadeIn 0.3s ease; }
+        .entry.error { color: #8b949e; }
+        .entry.danger { color: var(--danger); font-weight: bold; }
+        .entry.success { color: var(--success); }
+        .entry.highlight { color: #e3b341; }
+        .entry.info { color: #58a6ff; font-weight: bold; margin-top: 15px; border-top: 1px solid #333; padding-top:10px;}
+
+        #input-area {
+            margin-top: 15px;
+            display: flex;
+            gap: 10px;
+        }
+        input {
+            flex-grow: 1;
+            background: var(--input-bg);
+            border: 1px solid #30363d;
+            color: white;
+            padding: 15px;
+            border-radius: 5px;
+            font-size: 1.1rem;
+            outline: none;
+        }
+        input:focus { border-color: var(--highlight); }
+        button {
+            padding: 0 25px;
+            background: #238636;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+        button:hover { background: #2ea043; }
+        
+        /* גלילה מותאמת */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-thumb { background: #30363d; border-radius: 4px; }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(5px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
     </style>
 </head>
 <body>
-    <h1>המסע לעולם המסתורי</h1>
-    
-    <div class="info">
-        <h2>מיקום: {{ location['name'] }}</h2>
-        <p>{{ location['description'] }}</p>
-        <p>יציאות: <span class="highlight">{{ location['exits'].keys() | join(', ') }}</span></p>
-        {% if location['items'] %}
-        <p>חפצים: <span class="highlight">{{ location['items'] | join(', ') }}</span></p>
-        {% endif %}
-        {% if location['npc'] %}
-        <p>דמויות: <strong>{{ location['npc'] }}</strong></p>
-        {% endif %}
-        <p>מלאי: {{ inventory | join(', ') }}</p>
-    </div>
+    <div class="container">
+        <header>
+            <h1>מבוך הצללים</h1>
+            <div class="stats">
+                <span id="loc-display">מיקום: טוען...</span> | 
+                <span id="hp-display" style="color:var(--danger)">HP: --</span>
+                <button onclick="resetGame()" style="background:#da3633; padding:5px 10px; margin-right:10px; font-size:0.8rem">איפוס</button>
+            </div>
+        </header>
 
-    <div class="log" id="logBox">
-        {% for line in log %}
-            <div>>> {{ line }}</div>
-        {% endfor %}
-    </div>
+        <div id="game-log">
+            <!-- לוג המשחק ייכנס לפה -->
+        </div>
 
-    <form method="POST">
-        <input type="text" name="command" placeholder="מה לעשות? (למשל: go out, take old_bandage)" autofocus autocomplete="off">
-        <input type="submit" value="שלח">
-    </form>
-    
-    <form action="/reset" method="post" style="margin-top:20px;">
-        <button type="submit" style="background:none; border:none; color: #777; cursor:pointer;">איפוס משחק</button>
-    </form>
+        <form id="input-area" onsubmit="sendCommand(event)">
+            <input type="text" id="cmd-input" placeholder="מה תרצה לעשות? (לדוגמה: לך מזרח, קח חרב, תקוף...)" autofocus autocomplete="off">
+            <button type="submit">שלח</button>
+        </form>
+    </div>
 
     <script>
-        // גלילה אוטומטית למטה
-        var elem = document.getElementById('logBox');
-        elem.scrollTop = elem.scrollHeight;
+        const logContainer = document.getElementById('game-log');
+        const inputField = document.getElementById('cmd-input');
+        
+        // טעינה ראשונית
+        document.addEventListener("DOMContentLoaded", () => sendCommand(null, ''));
+
+        async function sendCommand(event, manualCmd = null) {
+            if(event) event.preventDefault();
+            
+            const cmd = manualCmd !== null ? manualCmd : inputField.value;
+            if(!cmd && manualCmd === null) return;
+
+            // ניקוי שדה
+            inputField.value = '';
+
+            // הצגה מקומית של פקודת המשתמש
+            if (cmd) {
+                appendLog({text: "> " + cmd}, 'neutral');
+            }
+
+            try {
+                const response = await fetch('/api/command', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ command: cmd })
+                });
+                
+                const data = await response.json();
+                
+                // עדכון לוג מלא או תוספות
+                // אנחנו נציג את הבלוק האחרון של הלוגים
+                data.log.forEach(entry => appendLog(entry));
+
+                // עדכון סטטיסטיקות UI
+                document.getElementById('hp-display').innerText = "HP: " + data.hp;
+                document.getElementById('loc-display').innerText = "מיקום: " + data.loc_name;
+
+            } catch (err) {
+                console.error(err);
+                appendLog({text: "שגיאת תקשורת עם השרת."}, 'error');
+            }
+        }
+
+        function appendLog(entry, typeOverride=null) {
+            const div = document.createElement('div');
+            div.className = 'entry ' + (typeOverride || entry.type || '');
+            div.innerText = entry.text;
+            logContainer.appendChild(div);
+            logContainer.scrollTop = logContainer.scrollHeight;
+        }
+
+        async function resetGame() {
+            await fetch('/api/reset', { method: 'POST' });
+            location.reload();
+        }
     </script>
 </body>
 </html>
 """
 
-# --- Routes (ניתובים) ---
-
-@app.route("/", methods=["GET", "POST"])
-def game():
-    # אתחול משחק אם לא קיים ב-Session
-    if 'game_state' not in session:
-        session['game_state'] = get_initial_state()
-    
-    state = session['game_state']
-    
-    if request.method == "POST":
-        user_cmd = request.form.get("command")
-        if user_cmd:
-            # הרצת לוגיקה
-            result_text = process_command(state, user_cmd)
-            
-            # עדכון היומן והתור
-            state['log'].append(f"{user_cmd} : {result_text}")
-            state['turn'] += 1
-            
-            # שמירה חזרה ל-Session (חשוב מאוד!)
-            session['game_state'] = state
-    
-    # שליפת המידע להצגה
-    current_loc_data = WORLD_DATA.get(state['current_location_id'], {})
-    
-    return render_template_string(
-        HTML_TEMPLATE, 
-        location=current_loc_data, 
-        inventory=state['inventory'],
-        log=state['log']
-    )
-
-@app.route("/reset", methods=["POST"])
-def reset():
-    session.clear()
-    return redirect(url_for('game'))
-
 if __name__ == "__main__":
-    # הרצת השרת במצב פיתוח
     app.run(debug=True, port=5000)
