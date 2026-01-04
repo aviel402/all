@@ -192,7 +192,7 @@ MENU_HTML = """
     </div>
 
     <footer>
-        &copy; 2026 Developed by Python Arcade System
+        &copy; aviel aluf x0583289789@gmail.com
     </footer>
 </body>
 </html>
