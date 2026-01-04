@@ -257,31 +257,45 @@ def index():
 
 @app.route("/api/command", methods=["POST"])
 def api_command():
-    data = request.json
+    # 1. מנסים לקבל נתונים בזהירות
+    data = request.get_json(silent=True)
+    if not data:
+        data = {}
+        
     cmd = data.get("command")
     
     # שליפת המצב מהסשן
     state = session.get("game_state", None)
     
-    # יצירת המנוע
-    engine = GameEngine(state)
+    # 2. אתחול מנוע
+    try:
+        engine = GameEngine(state)
+    except Exception as e:
+        # אם יש שגיאה ביצירת המנוע, מתחילים חדש
+        print(f"Error loading state: {e}")
+        engine = GameEngine(None)
     
-    # אם זו התחלה, נאתחל את התצוגה
+    # 3. ביצוע פקודה
     if not state and not cmd:
+        # פעם ראשונה שפותחים את הדף
         engine._cmd_look(None)
     elif cmd:
-        # הרצת פקודה
         engine.process(cmd)
     
     # שמירת מצב ועדכון לקוח
     session["game_state"] = engine.state
-    return jsonify({
-        "log": engine.state["log"][-5:], # מחזיר רק את השורות האחרונות לעדכון מהיר
-        "full_log": engine.state["log"],
-        "hp": engine.state["hp"],
-        "loc_name": GAME_DATA["rooms"][engine.state["loc"]]["name"]
-    })
+    
+    # 4. לוודא שלא חסר שום שדה בתשובה
+    loc_name = "לא ידוע"
+    if engine.state["loc"] in GAME_DATA["rooms"]:
+        loc_name = GAME_DATA["rooms"][engine.state["loc"]]["name"]
 
+    return jsonify({
+        "log": engine.state["log"][-10:], # שולח 10 שורות אחרונות
+        "full_log": engine.state["log"],
+        "hp": engine.state.get("hp", 0),
+        "loc_name": loc_name
+    })
 @app.route("/api/reset", methods=["POST"])
 def api_reset():
     session.clear()
