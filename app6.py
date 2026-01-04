@@ -1,18 +1,34 @@
 from flask import Flask, render_template_string, request, jsonify, session, url_for
 import json
 import uuid
-import random
+import os
 
-# ==========================================
-# הגדרות מנוע AI (כאן תחליט אם להשתמש בחיקוי או באמיתי)
-# ==========================================
-USE_REAL_AI = True  # שנה ל-True אם יש לך מפתח של OpenAI
-OPENAI_API_KEY = "AIzaSyDOXGXKRgzSVtiE-lSFe8V8daIzH83OdI4" # הכנס את המפתח שלך כאן
+# === הוספנו את הספריה של OpenAI ===
+try:
+    from openai import OpenAI
+    HAS_OPENAI_LIB = True
+except ImportError:
+    HAS_OPENAI_LIB = False
+    print("Error: Please run 'pip install openai' in terminal")
 
 app = Flask(__name__)
 app.secret_key = 'shadow_maze_secret_key'
 
-# --- נתוני עולם (World Data) ---
+# ==========================================
+# 🛑 כאן מדביקים את המפתח שלך 🛑
+# ==========================================
+MY_OPENAI_KEY = "sk-..."  # <--- תמחוק את זה ותדביק את המפתח הארוך שלך כאן במרכאות
+
+# הגדרת הלקוח
+client = None
+if HAS_OPENAI_LIB and "sk-" in MY_OPENAI_KEY:
+    try:
+        client = OpenAI(api_key=MY_OPENAI_KEY)
+        print(">> OpenAI Client Connected successfully.")
+    except Exception as e:
+        print(f">> Error connecting to OpenAI: {e}")
+
+# --- נתוני עולם (נשאר זהה - ודא שלא מחקת את WORLD_DATA הקודם) ---
 GAME_DATA = {
     "start_room": "cell",
     "rooms": {
@@ -50,7 +66,7 @@ GAME_DATA = {
 }
 
 # ==========================================
-# לוגיקה חכמה (Engine)
+# מנוע חכם עם AI
 # ==========================================
 class GameEngine:
     def __init__(self, state=None):
@@ -61,11 +77,110 @@ class GameEngine:
                 "loc": "cell",
                 "inv": [],
                 "hp": 30,
-                "log": [{"text": "ברוך הבא למבוך. אתה מתעורר בחדר חשוך... (כתוב 'עזרה' לרשימת פקודות)", "type": "game"}],
+                "log": [{"text": "התעוררת... המקום חשוך. (המערכת מחוברת לבינה מלאכותית)", "type": "game"}],
                 "flags": {}
             }
 
     def add_msg(self, text, type="game"):
+        self.state["log"].append({"text": text, "type": type})
+
+    def get_room(self):
+        return GAME_DATA["rooms"][self.state["loc"]]
+
+    def process_input(self, user_input):
+        cmd_parts = user_input.strip().lower().split()
+        if not cmd_parts: return self.state
+
+        action = cmd_parts[0]
+        # זיהוי פקודות בסיסיות (כדי שהמשחק יהיה מהיר)
+        commands = {
+            "go": self._go, "לך": self._go,
+            "take": self._take, "קח": self._take,
+            "look": self._look, "הסתכל": self._look, "ראה": self._look,
+            "inv": self._inv, "i": self._inv, "תיק": self._inv,
+            "use": self._use, "השתמש": self._use,
+            "attack": self._attack, "תקוף": self._attack,
+            "help": self._help, "עזרה": self._help
+        }
+
+        if action in commands:
+            arg = cmd_parts[1] if len(cmd_parts) > 1 else None
+            commands[action](arg)
+        else:
+            # 💡 כאן ה-AI נכנס לפעולה!
+            response = self.ask_ai_guide(user_input)
+            self.add_msg(response, "ai")
+        
+        return self.state
+
+    # --- פונקציות בסיסיות (העתק-הדבק מהקוד הקודם, אני אשים פה גרסה מקוצרת כדי לא לחרוג) ---
+    def _look(self, arg):
+        r = self.get_room()
+        # תיאור טקסטואלי לקוני למערכת הלוגים
+        self.add_msg(f"אתה נמצא ב{r['name']}. {r['desc']}", "game")
+        # בפועל, ב-CSS אנחנו מציגים את השם למעלה
+        if r["items"]: self.add_msg("חפצים על הרצפה: " + ", ".join(r["items"]), "game info")
+    
+    def _inv(self, arg):
+        self.add_msg(f"מלאי: {self.state['inv']}", "game info")
+        
+    def _go(self, d): 
+        # לוגיקה מקוצרת להדגמה - תוודא שהעתקת את המלאה מקודם אם תרצה חסימות
+        room = self.get_room()
+        direction_map = {"קדימה": "north", "אחורה": "south", "יציאה": "out"}
+        d = direction_map.get(d, d)
+        if d in room["exits"]:
+            self.state["loc"] = room["exits"][d]
+            self.add_msg(f"עברת ל-{d}", "game success")
+            self._look(None)
+        else:
+            self.add_msg("אין דרך לשם.", "game warning")
+            
+    def _take(self, item): self.add_msg(f"ניסית לקחת {item}...", "game")
+    def _use(self, item): self.add_msg(f"מנסה להשתמש ב-{item}...", "game")
+    def _attack(self, item): self.add_msg(f"תקפת!", "game")
+    def _help(self, arg): self.add_msg("פקודות: לך, קח, הסתכל, השתמש...", "game")
+
+    # ===============================================
+    # 🧠 המוח האמיתי: החיבור ל-OpenAI 🧠
+    # ===============================================
+    def ask_ai_guide(self, question):
+        if not client:
+            return "חיבור ה-AI לא הוגדר (בדוק את המפתח בקוד)."
+
+        # אנחנו מכינים ל-AI את כל ההקשר של המשחק כדי שיענה כמו מדריך
+        current_room_data = self.get_room()
+        inventory_list = self.state['inv'] if self.state['inv'] else "כלום"
+        
+        prompt = f"""
+        אתה "מדריך המבוך" (Dungeon Master) במשחק הרפתקאות טקסטואלי אפל.
+        השחקן שואל: "{question}"
+        
+        המצב הנוכחי:
+        - מיקום: {current_room_data['name']}
+        - תיאור חדר: {current_room_data['desc']}
+        - חפצים בחדר: {current_room_data.get('items', [])}
+        - חפצים בידי השחקן: {inventory_list}
+        
+        הוראות:
+        1. ענה בעברית, בטון מסתורי אבל עוזר.
+        2. תהיה קצר (עד 20 מילים).
+        3. אל תיתן הוראות טכניות (כמו "לחץ על כפתור"), אלא סיפוריות.
+        4. אם הוא שואל מה לעשות, תן לו רמז עדין על סמך החפצים שיש או אין לו.
+        """
+
+        try:
+            completion = client.chat.completions.create(
+                model="gpt-3.5-turbo", # או gpt-4 אם יש לך גישה ותקציב
+                messages=[
+                    {"role": "system", "content": prompt}
+                ]
+            )
+            return "המדריך: " + completion.choices[0].message.content
+        except Exception as e:
+            return f"תקלת AI: {str(e)}"
+
+# --- Routes וכל השאר נשאר זהה למה ששלחתי ב-App6 קודם ---    def add_msg(self, text, type="game"):
         self.state["log"].append({"text": text, "type": type})
 
     def get_room(self):
