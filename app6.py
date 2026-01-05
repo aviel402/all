@@ -7,7 +7,7 @@ import uuid
 # ==========================================
 
 MY_GOOGLE_KEY = "AIzaSyDOXGXKRgzSVtiE-lSFe8V8daIzH83OdI4" # <-- וודא שהמפתח שלך כאן
-model_name = "models/gemma-3n-e2b-it"
+model_name = "models/gemini-3-pro-preview"
 
 GEMINI_AVAILABLE = False
 try:
