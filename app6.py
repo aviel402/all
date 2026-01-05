@@ -7,13 +7,13 @@ import uuid
 # ==========================================
 
 # 1. הדבק את המפתח של גוגל כאן (בתוך המרכאות)
-MY_GOOGLE_KEY = "AIzaSy..."  
+MY_GOOGLE_KEY = "AIzaSyDOXGXKRgzSVtiE-lSFe8V8daIzH83OdI4"  
 
 GEMINI_AVAILABLE = False
 try:
     import google.generativeai as genai
     genai.configure(api_key=MY_GOOGLE_KEY)
-    model = genai.GenerativeModel('gemini-1.5-flash') # או 'gemini-pro'
+    model = genai.GenerativeModel('gemini-pro') # או 'gemini-pro'
     GEMINI_AVAILABLE = True
     print(">> Google Gemini מחובר בהצלחה.")
 except ImportError:
