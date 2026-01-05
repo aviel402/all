@@ -17,7 +17,8 @@ try:
     
     # --- התיקון כאן ---
     # במקום gemini-pro, אנחנו משתמשים בגרסה המעודכנת:
-    model_name = "models/gemini-1.5-flash"
+    model_name = "models/gemini-2.5-flash
+"
     
     model = genai.GenerativeModel(model_name)
     GEMINI_AVAILABLE = True
