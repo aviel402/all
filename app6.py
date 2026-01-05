@@ -7,6 +7,7 @@ import uuid
 # ==========================================
 
 MY_GOOGLE_KEY = "AIzaSyDOXGXKRgzSVtiE-lSFe8V8daIzH83OdI4" # <-- וודא שהמפתח שלך כאן
+model_name = "models/gemini-exp-1206"
 
 GEMINI_AVAILABLE = False
 try:
@@ -17,7 +18,6 @@ try:
     
     # --- התיקון כאן ---
     # במקום gemini-pro, אנחנו משתמשים בגרסה המעודכנת:
-    model_name = "models/gemini-2.5-flash"
     
     model = genai.GenerativeModel(model_name)
     GEMINI_AVAILABLE = True
