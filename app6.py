@@ -3,24 +3,38 @@ import json
 import uuid
 
 # ==========================================
-# 💎 הגדרת Google Gemini 💎
+# 💎 הגדרת Google Gemini (תיקון גרסאות) 💎
 # ==========================================
 
-# 1. הדבק את המפתח של גוגל כאן (בתוך המרכאות)
-MY_GOOGLE_KEY = "AIzaSyDOXGXKRgzSVtiE-lSFe8V8daIzH83OdI4"  
+MY_GOOGLE_KEY = "AIzaSyDOXGXKRgzSVtiE-lSFe8V8daIzH83OdI4" # <-- וודא שהמפתח שלך כאן
 
 GEMINI_AVAILABLE = False
 try:
     import google.generativeai as genai
+    
+    # חיבור המפתח
     genai.configure(api_key=MY_GOOGLE_KEY)
-    model = genai.GenerativeModel('gemini-pro') # או 'gemini-pro'
+    
+    # --- התיקון כאן ---
+    # במקום gemini-pro, אנחנו משתמשים בגרסה המעודכנת:
+    model_name = "models/gemini-1.5-flash"
+    
+    model = genai.GenerativeModel(model_name)
     GEMINI_AVAILABLE = True
-    print(">> Google Gemini מחובר בהצלחה.")
-except ImportError:
-    print("❌ שגיאה: נא להריץ בטרמינל: pip install google-generativeai")
-except Exception as e:
-    print(f"❌ שגיאה בחיבור למפתח גוגל: {e}")
+    print(f">> מחובר בהצלחה למודל: {model_name}")
 
+except Exception as e:
+    print(f"❌ שגיאה בחיבור ל-Gemini: {e}")
+    # אם יש שגיאה, נדפיס לרשימת המודלים הפנויים כדי שנדע מה לבחור
+    try:
+        import google.generativeai as genai
+        genai.configure(api_key=MY_GOOGLE_KEY)
+        print("המודלים הזמינים עבורך הם:")
+        for m in genai.list_models():
+            if 'generateContent' in m.supported_generation_methods:
+                print(f"- {m.name}")
+    except:
+        pass
 
 app = Flask(__name__)
 app.secret_key = 'shadow_maze_secret_key'
