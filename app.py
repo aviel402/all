@@ -148,7 +148,7 @@ MENU_HTML = """
         }
 
         footer {
-            margin-top: 80px;
+            margin-top: 80.5px;
             color: #636e72;
             font-size: 0.8rem;
         }
