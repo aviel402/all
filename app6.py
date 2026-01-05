@@ -179,13 +179,57 @@ class GameEngine:
         else:
              self.add_msg("אי אפשר להשתמש בזה כרגע.", "game")
 
-    # ===============================================
-    # 🧠 החיבור לגוגל ג'מיני 🧠
+# ===============================================
+    # 🧠 החיבור לגוגל ג'מיני (מצב דיבאג מלא למסך) 🧠
     # ===============================================
     def ask_gemini_guide(self, question):
         if not GEMINI_AVAILABLE:
-            return "המערכת לא מחוברת למפתח גוגל תקין."
+            return "<span style='color:red'>הספרייה לא הותקנה או שחסר מפתח API בקוד.</span>"
 
+        r = self.get_room()
+        
+        prompt = f"""
+        אתה מדריך במשחק מבוכים. השחקן ב{r['name']}. הוא שאל: "{question}".
+        ענה לו במשפט קצר ומסתורי בעברית.
+        """
+        
+        try:
+            # 1. ניסיון רגיל לשלוח לגוגל
+            response = model.generate_content(prompt)
+            return "🤖 " + response.text
+            
+        except Exception as e:
+            # 2. אם יש שגיאה (כמו מודל לא נמצא), נבצע חקירה:
+            error_message = str(e)
+            
+            # ניסיון לשלוף את רשימת המודלים האמיתית שזמינה לך כרגע
+            available_list_html = ""
+            try:
+                import google.generativeai as genai
+                # שליפת מודלים שתומכים ב-generateContent (יצירת טקסט)
+                models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+                
+                # עיצוב הרשימה ל-HTML
+                for m_name in models:
+                    available_list_html += f"<code>{m_name}</code><br>"
+                    
+            except Exception as ex:
+                available_list_html = f"לא ניתן היה לשלוף רשימה: {ex}"
+
+            # 3. החזרת הודעה מעוצבת למשתמש
+            return f"""
+            <div style="border: 1px solid red; background: #3d0000; padding: 10px; border-radius: 5px; color: #ffcccc;">
+                <strong>⚠️ שגיאת מערכת AI</strong><br>
+                {error_message}
+                <hr style="border-color: #ff5555; opacity: 0.3;">
+                <strong>💡 מודלים זמינים בחשבון שלך:</strong><br>
+                <div style="margin-top:5px; color: lightgreen; font-family: monospace;">
+                    {available_list_html}
+                </div>
+                <br>
+                <em>טיפ: העתק את אחד השמות הירוקים והדבק בקוד בשורה: <br> model = genai.GenerativeModel('כאן')</em>
+            </div>
+            """
         r = self.get_room()
         inv_str = ", ".join(self.state['inv']) if self.state['inv'] else "כלום"
         
