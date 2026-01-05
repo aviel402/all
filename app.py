@@ -42,9 +42,9 @@ MENU_HTML = """
     <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;700;900&display=swap" rel="stylesheet">
     <style>
         :root {
-            --primary: #6c5ce7;
+            --primary: #6c7ce7;
             --accent: #00cec9;
-            --bg-dark: #121212;
+            --bg-dark: #12d212;
             --card-bg: #1e1e24;
         }
 
