@@ -171,7 +171,7 @@ HTML_PAGE = """
             <div class="actions">
                 <h4>פעולות:</h4>
                 <a href="/game4/recruit/5"><button>גייס 5 חייל (50$)</button></a>
-                <a href="/game4/recruit/15"><button>גייס 15 חיילים (450$)</button></a>
+                <a href="/game4/recruit/15"><button>גייס 15 חיילים (140$)</button></a>
                 <br><br>
                 <a href="/game4/next_turn"><button class="end-turn">סיים יום (קבל הכנסה) 🌙</button></a>
                 <br>
