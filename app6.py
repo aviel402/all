@@ -4,10 +4,10 @@ import uuid
 import random
 
 app = Flask(__name__)
-# מפתח סודי חדש שמנקה בכוח סשנים ישנים כדי למנוע התנגשויות (פותר את ה-500)
-app.secret_key = 'cyber_dungeon_pro_edition_v1'
+# שינוי המפתח מכריח את הדפדפן להתחיל משחק חדש ונקי (פותר בעיות תקיעה)
+app.secret_key = 'cyber_final_fix_v8'
 
-# --- 🌑 מאגר נתונים (WORLD DATA) ---
+# --- 🌑 WORLD DATA ---
 GAME_DATA = {
     "start_room": "cell",
     "rooms": {
@@ -40,21 +40,21 @@ GAME_DATA = {
     }
 }
 
-# --- 🧠 מנוע לוגי (Logic Core) ---
+# --- 🧠 LOGIC ENGINE ---
 class GameEngine:
     def __init__(self, state=None):
-        # אתחול חסין-תקלות
+        # אם אין שמירה, יוצר חדשה
         if not state or "loc" not in state:
             self.state = {
                 "loc": "cell",
                 "inv": [],
-                "log": [{"text": "המערכת אותחלה. החיבור למוח נוצר...", "type": "system"}],
+                "log": [{"text": "INITIALIZING SYSTEM... OK.<br>חיבור הושלם. המוח המרכזי ממתין לפקודה.", "type": "system"}],
                 "flags": {}
             }
         else:
             self.state = state
         
-        # וידוא שהמיקום תקין למניעת קריסות
+        # הגנה: אם השחקן תקוע בחדר לא קיים, מחזיר להתחלה
         if self.state["loc"] not in GAME_DATA["rooms"]:
             self.state["loc"] = "cell"
 
@@ -64,50 +64,55 @@ class GameEngine:
     def get_room_data(self):
         return GAME_DATA["rooms"][self.state["loc"]]
 
-    # מערכת תגובות חכמה (ללא API חיצוני)
+    # מערכת תגובות אוטומטית (Offline AI)
     def ai_response(self, text):
         t = text.lower()
         inv_ids = self.state["inv"]
         current_room = self.get_room_data()
         
-        # תרגום שמות חפצים בתיק לעברית לתצוגה
+        # תרגום חפצים לעברית
         inv_names = [GAME_DATA["items"][x]["name"] for x in inv_ids] if inv_ids else []
 
-        if any(w in t for w in ["מיקום", "איפה", "סביב", "מקום"]):
-            return f"Neural Link: אתה מאותר ב-<b>{current_room['name']}</b>. הזהירות נדרשת."
+        if any(w in t for w in ["מיקום", "איפה", "סביב", "מקום", "הסתכל"]):
+            return f"SYSTEM: מיקום נוכחי: <b>{current_room['name']}</b>. סרוק ויזואלית לקבלת פרטים."
 
         if "מפתח" in t or "כרטיס" in t:
             if "key_card" in inv_ids:
-                return "Neural Link: כרטיס הגישה בידיים שלך."
+                return "SYSTEM: אישור כניסה (כרטיס) זוהה בתיק."
             elif "key_card" in current_room.get("items", []):
-                return "Neural Link: יש כאן כרטיס גישה. קח אותו."
-            return "Neural Link: נדרש אישור כניסה (כרטיס) כדי לעבור בדלתות מסוימות."
+                return "SYSTEM: כרטיס אבטחה זוהה בחדר. מומלץ לאסוף."
+            return "SYSTEM: נדרש כרטיס לפתיחת סקטורים נעולים."
 
         if "מה" in t and "תיק" in t:
-            if not inv_names: return "Neural Link: התיק שלך ריק."
-            return f"Neural Link: ציוד נוכחי: {', '.join(inv_names)}."
+            if not inv_names: return "SYSTEM: תיק הציוד ריק."
+            return f"SYSTEM: תכולת תיק: {', '.join(inv_names)}."
 
+        # תגובות גנריות בסגנון טרמינל
         responses = [
-            "Neural Link: הפקודה לא ברורה. נסה להתמקד בחפצים.",
-            "Neural Link: הרעש הסטטי בראש מפריע. נסה שוב.",
-            "Neural Link: סרוק את הסביבה ('הסתכל').",
-            f"Neural Link: המערכת מזהה שניסית להגיד '{text}', אך ללא הצלחה."
+            "ERROR: פקודה לא מזוהה.",
+            "SYSTEM: קלט לא חוקי. נסה להתמקד בפעולות בסיסיות.",
+            "SYSTEM: נסה 'סרוק', 'קח' או 'לך'.",
         ]
         return random.choice(responses)
 
     def process_command(self, cmd_text):
+        if not cmd_text: return self.state
+
+        # ניקוי הלוג הקודם כדי שלא יהיה עמוס מדי (אופציונלי)
+        if len(self.state["log"]) > 50:
+            self.state["log"] = self.state["log"][-50:]
+
         parts = cmd_text.strip().lower().split()
         if not parts: return self.state
         
         cmd = parts[0]
         arg = parts[1] if len(parts) > 1 else ""
 
-        # פקודות מערכת
         actions = {
-            "go": self._go, "לך": self._go, "move": self._go,
-            "take": self._take, "קח": self._take, "get": self._take,
+            "go": self._go, "לך": self._go, "move": self._go, "נוע": self._go, "התקדם": self._go,
+            "take": self._take, "קח": self._take, "get": self._take, "אסוף": self._take,
             "look": self._look, "הסתכל": self._look, "סרוק": self._look,
-            "inv": self._inv, "תיק": self._inv, "ציוד": self._inv,
+            "inv": self._inv, "תיק": self._inv, "ציוד": self._inv, "מלאי": self._inv,
             "use": self._use, "השתמש": self._use,
             "help": self._help, "עזרה": self._help
         }
@@ -115,7 +120,6 @@ class GameEngine:
         if cmd in actions:
             actions[cmd](arg)
         else:
-            # הפעלת AI מקומי
             response = self.ai_response(cmd_text)
             self.add_msg(response, "ai")
         
@@ -123,104 +127,101 @@ class GameEngine:
 
     # -- מימושים --
     def _help(self, arg):
-        self.add_msg("פקודות: הסתכל, קח [חפץ], תיק, לך [כיוון], השתמש ב...", "info")
+        self.add_msg("פקודות: סרוק, קח [חפץ], תיק, לך [כיוון], השתמש ב...", "info")
 
     def _look(self, arg):
         r = self.get_room_data()
-        html = f"<div class='scan-line'></div>סריקת אזור: <b>{r['name']}</b><br>{r['desc']}"
-        
-        # תצוגת חפצים
+        html = f"<div class='scan-line'></div>מיקום: <b>{r['name']}</b><br>{r['desc']}"
         if r.get("items"):
             names = [GAME_DATA["items"][i]["name"] for i in r["items"]]
-            html += f"<br><br><span style='color:#00ff9d'>⚠️ זוהו אובייקטים: {', '.join(names)}</span>"
-            
+            html += f"<br><br><span style='color:#00ff9d'>[!] זוהו אובייקטים: {', '.join(names)}</span>"
         self.add_msg(html, "game")
 
     def _inv(self, arg):
         inv = self.state["inv"]
         if not inv: 
-            self.add_msg("סטטוס ציוד: ריק", "info")
+            self.add_msg("ציוד: אין.", "info")
             return
         names = [GAME_DATA["items"][i]["name"] for i in inv]
         self.add_msg(f"ציוד טקטי: {', '.join(names)}", "info")
 
     def _go(self, direction):
-        # תרגום כיוונים
-        d_map = {"קדימה": "north", "אחורה": "south", "יציאה": "out", "החוצה": "out", 
-                 "צפון": "north", "דרום": "south"}
+        d_map = {"קדימה": "north", "אחורה": "south", "יציאה": "out", "החוצה": "out", "צפון": "north", "דרום": "south"}
         direction = d_map.get(direction, direction)
         
         r = self.get_room_data()
         
-        # בדיקת נעילות (לדוגמה בתא ההתחלה)
         if self.state["loc"] == "cell" and direction == "out":
             if r["interactables"]["door"]["locked"]:
-                self.add_msg("שגיאה: דלת נעולה. נדרש מפתח גישה.", "warning")
+                self.add_msg("גישה נדחתה: דלת נעולה. נדרש כרטיס מגנטי.", "warning")
                 return
 
         if direction in r.get("exits", {}):
             self.state["loc"] = r["exits"][direction]
             new_r = GAME_DATA["rooms"][self.state["loc"]]
-            self.add_msg(f"מעבר ל{new_r['name']} בוצע.", "game")
+            self.add_msg(f"עובר ל-{new_r['name']}...", "game")
             self._look(None)
         else:
-            self.add_msg("נתיב חסום או לא קיים.", "warning")
+            self.add_msg("נתיב שגוי או חסום.", "warning")
 
     def _take(self, item_name):
-        # מיפוי פשוט לעברית
         name_map = {"כף": "spoon", "אלה": "baton", "כרטיס": "key_card", "מפתח": "key_card"}
         target_id = name_map.get(item_name, item_name)
-        
         r = self.get_room_data()
+        
         if target_id in r.get("items", []):
             self.state["inv"].append(target_id)
             r["items"].remove(target_id)
             item_n = GAME_DATA["items"][target_id]["name"]
-            self.add_msg(f"{item_n} נוסף למלאי.", "success")
+            self.add_msg(f"נלקח: {item_n}.", "success")
         else:
-            self.add_msg("פריט לא נמצא בסריקה.", "warning")
+            self.add_msg("פריט לא זוהה בשטח.", "warning")
 
     def _use(self, arg):
         if "כרטיס" in arg or "מפתח" in arg:
             if "key_card" in self.state["inv"]:
                  if self.state["loc"] == "cell":
                      GAME_DATA["rooms"]["cell"]["interactables"]["door"]["locked"] = False
-                     self.add_msg("גישה מאושרת. הדלת נפתחה.", "success")
+                     self.add_msg("גישה אושרה. מנעולים נפתחו.", "success")
                  else:
-                     self.add_msg("אין כאן מערכת נעילה מתאימה.", "info")
+                     self.add_msg("אין כאן פאנל שליטה לדלת.", "info")
             else:
-                 self.add_msg("אין ברשותך כרטיס גישה.", "warning")
+                 self.add_msg("כרטיס גישה חסר.", "warning")
         else:
-             self.add_msg("פקודה לא ישימה.", "info")
+             self.add_msg("פקודה לא ניתנת לביצוע.", "info")
 
 
-# --- 🌐 Routes ---
+# --- 🌐 ROUTES 🌐 ---
 
 @app.route("/")
 def index():
     if "uid" not in session: session["uid"] = str(uuid.uuid4())
-    return render_template_string(HTML_INTERFACE)
+    
+    # === התיקון הגדול: כתובות דינמיות ===
+    # זה מה שמונע מהדפדפן לשלוח פקודה לכתובת הלא נכונה
+    api_url = url_for('handle_command')
+    reset_url = url_for('reset_game')
+    
+    return render_template_string(HTML_INTERFACE, api_url=api_url, reset_url=reset_url)
 
 @app.route("/api/command", methods=["POST"])
 def handle_command():
     try:
-        # 1. קבלת הפקודה
         data = request.get_json(silent=True) or {}
         user_cmd = data.get("command", "")
         
-        # 2. טעינת מצב
         current_state = session.get("game_state", None)
         engine = GameEngine(current_state)
         
-        # 3. עיבוד
+        # אם יש פקודה, נבצע
         if user_cmd:
             engine.add_msg(user_cmd, "user")
             engine.process_command(user_cmd)
         
-        # 4. שמירה
+        # עדכון ושמירה
         session["game_state"] = engine.state
         
-        # 5. מניעת קריסה בשליפת שם
+        # חישוב שם מיקום בטוח
         loc_id = engine.state["loc"]
         loc_name = GAME_DATA["rooms"].get(loc_id, {}).get("name", "Unknown Sector")
         
@@ -230,10 +231,10 @@ def handle_command():
         })
 
     except Exception as e:
-        # מלכודת 500: אם יש קריסה, מחזירים הודעת מערכת יפה במקום שגיאת שרת
+        print(f"Error in command: {e}")
         return jsonify({
-            "log": [{"text": "שגיאת מערכת קריטית. מנסה לשחזר יציבות...", "type": "warning"}],
-            "loc_name": "System Failure"
+            "log": [{"text": f"FATAL ERROR: {str(e)}", "type": "warning"}],
+            "loc_name": "ERROR"
         })
 
 @app.route("/api/reset", methods=["POST"])
@@ -242,7 +243,7 @@ def reset_game():
     return jsonify({"status": "ok"})
 
 
-# --- 🎨 High-End Cyberpunk UI ---
+# --- 🎨 UI ---
 
 HTML_INTERFACE = """
 <!DOCTYPE html>
@@ -276,7 +277,6 @@ HTML_INTERFACE = """
             background-size: 50px 50px;
         }
 
-        /* Container Setup */
         .interface {
             display: flex;
             width: 100%;
@@ -284,7 +284,7 @@ HTML_INTERFACE = """
             height: 100vh;
         }
 
-        /* Sidebar - Controls */
+        /* Sidebar */
         .sidebar {
             width: 250px;
             background: var(--panel-bg);
@@ -331,7 +331,7 @@ HTML_INTERFACE = """
             transform: translateX(-5px);
         }
 
-        /* Main Terminal Area */
+        /* Main Terminal */
         .terminal {
             flex-grow: 1;
             display: flex;
@@ -361,7 +361,6 @@ HTML_INTERFACE = """
             font-size: 1.05rem;
         }
 
-        /* Messages Styling */
         .msg {
             max-width: 80%;
             padding: 12px 16px;
@@ -378,26 +377,13 @@ HTML_INTERFACE = """
             color: #fff;
         }
         
-        .msg.game {
-            align-self: flex-end;
-            background: rgba(255, 255, 255, 0.05);
-            border-left: 2px solid #555;
-            color: #ccc;
-        }
-        
-        .msg.ai {
-            align-self: flex-end;
-            border: 1px solid var(--neon-pink);
-            background: rgba(188, 19, 254, 0.05);
-            color: #e0d0ff;
-            box-shadow: 0 0 10px rgba(188, 19, 254, 0.1);
-        }
-        
+        .msg.game { align-self: flex-end; background: rgba(255, 255, 255, 0.05); border-left: 2px solid #555; color: #ccc; }
+        .msg.ai { align-self: flex-end; border: 1px solid var(--neon-pink); background: rgba(188, 19, 254, 0.05); color: #e0d0ff; box-shadow: 0 0 10px rgba(188, 19, 254, 0.1); }
         .msg.success { border-left: 2px solid var(--neon-green); color: var(--neon-green); align-self: flex-end;}
         .msg.warning { border-left: 2px solid #ffcc00; color: #ffcc00; align-self: flex-end;}
-        .msg.system { text-align: center; color: #555; align-self: center; font-size: 0.8rem; border: none; background: transparent;}
+        .msg.system { text-align: center; color: #555; align-self: center; font-size: 0.8rem; border: none; background: transparent; width:100%;}
 
-        /* Input Area */
+        /* Input */
         .input-deck {
             margin-top: 15px;
             display: flex;
@@ -417,11 +403,7 @@ HTML_INTERFACE = """
             border-radius: 4px;
         }
         
-        input:focus {
-            outline: none;
-            border-color: var(--neon-blue);
-            box-shadow: 0 0 10px rgba(0, 243, 255, 0.1);
-        }
+        input:focus { outline: none; border-color: var(--neon-blue); box-shadow: 0 0 10px rgba(0, 243, 255, 0.1); }
         
         .send-btn {
             background: var(--neon-blue);
@@ -434,22 +416,16 @@ HTML_INTERFACE = """
             transition: 0.3s;
         }
         
-        .send-btn:hover {
-            background: #fff;
-            box-shadow: 0 0 15px var(--neon-blue);
-        }
+        .send-btn:hover { background: #fff; box-shadow: 0 0 15px var(--neon-blue); }
 
         @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
 
-        /* Custom Scrollbar */
         ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-track { background: #000; }
         ::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
         ::-webkit-scrollbar-thumb:hover { background: var(--neon-blue); }
 
-        @media(max-width: 768px) {
-            .sidebar { display: none; } /* מובייל נקי */
-        }
+        @media(max-width: 768px) { .sidebar { display: none; } }
     </style>
 </head>
 <body>
@@ -468,16 +444,14 @@ HTML_INTERFACE = """
 
         <div class="terminal">
             <div class="location-bar">
-                <span id="loc-display">SECTOR: UNKNOWN</span>
-                <span style="font-size:0.8rem; opacity:0.7">CONN: STABLE</span>
+                <span id="loc-display">LOADING SYSTEM...</span>
+                <span style="font-size:0.8rem; opacity:0.7">CONN: ENCRYPTED</span>
             </div>
             
-            <div class="log-container" id="game-log">
-                <!-- Log goes here -->
-            </div>
+            <div class="log-container" id="game-log"></div>
             
             <div class="input-deck">
-                <input type="text" id="cmd-input" placeholder="Enter Command..." autocomplete="off">
+                <input type="text" id="cmd-input" placeholder="Type Command..." autocomplete="off">
                 <button class="send-btn" onclick="sendCmd()">EXE</button>
             </div>
         </div>
@@ -485,7 +459,10 @@ HTML_INTERFACE = """
     </div>
 
     <script>
-        // Init logic
+        // חיבור המשתנים מפייתון לג'אווהסקריפט
+        const API_URL = "{{ api_url }}";
+        const RESET_URL = "{{ reset_url }}";
+
         document.addEventListener('DOMContentLoaded', () => sendCmd(null));
 
         function inject(txt) {
@@ -498,26 +475,34 @@ HTML_INTERFACE = """
             const txt = txtOverride !== undefined ? txtOverride : inp.value;
             if (txtOverride !== null) inp.value = '';
 
+            // חיווי חזותי אם יש שגיאה בטעינה הראשונית
             try {
-                const res = await fetch('/api/command', {
+                const res = await fetch(API_URL, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({command: txt})
                 });
                 
-                if (res.status === 500) { throw new Error('Server Crash'); }
+                if (res.status !== 200) throw new Error('Network error ' + res.status);
                 
                 const data = await res.json();
                 renderLog(data.log);
-                document.getElementById('loc-display').innerText = "SECTOR: " + data.loc_name.toUpperCase();
+                
+                if(data.loc_name) {
+                    document.getElementById('loc-display').innerText = "SECTOR: " + data.loc_name.toUpperCase();
+                }
 
             } catch (e) {
-                console.error("Link Failure", e);
-                // נפילה שקטה - המשתמש לא רואה שגיאה מכוערת
+                console.error("ERROR:", e);
+                // כותב הודעה למסך במקרה של שגיאת התחברות, כדי שלא יהיה שחור
+                if (document.getElementById('game-log').innerHTML === "") {
+                     document.getElementById('game-log').innerHTML = `<div class='msg warning'>CONNECTION ERROR: המערכת לא מצליחה לתקשר עם השרת.<br>ודא שהקוד רץ ב-Launcher ונסה לרענן.</div>`;
+                }
             }
         }
 
         function renderLog(log) {
+            if (!log) return;
             const container = document.getElementById('game-log');
             container.innerHTML = '';
             
@@ -531,11 +516,10 @@ HTML_INTERFACE = """
         }
 
         async function hardReset() {
-            await fetch('/api/reset', {method:'POST'});
+            await fetch(RESET_URL, {method:'POST'});
             location.reload();
         }
 
-        // Enter key support
         document.getElementById('cmd-input').addEventListener("keyup", function(event) {
             if (event.key === "Enter") sendCmd();
         });
@@ -546,5 +530,4 @@ HTML_INTERFACE = """
 """
 
 if __name__ == "__main__":
-    app.run(port=5006, debug=False) 
-    # debug=False כדי להסתיר שגיאות בטרמינל שנראות לא מקצועיות
+    app.run(port=5006, debug=True)
