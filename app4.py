@@ -224,7 +224,7 @@ def index():
 def recruit(amount):
     cost = 10 * amount
     if amount >= 15:
-        cost = 450 # הנחת כמות
+        cost = 140
     
     if gameState.money >= cost:
         gameState.money -= cost
