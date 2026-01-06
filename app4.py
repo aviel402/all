@@ -84,6 +84,7 @@ class Game:
 gameState = Game()
 
 # --- CSS & HTML UI ---
+# שים לב: נוספו /game4/ בקישורים
 
 STYLE = """
 <style>
@@ -123,6 +124,9 @@ STYLE = """
     .overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); display: flex; align-items: center; justify-content: center; z-index: 999; flex-direction: column; }
     .overlay h1 { font-size: 3em; color: gold; }
     a.restart { padding: 15px 30px; background: white; color: black; text-decoration: none; font-weight: bold; border-radius: 5px; margin-top: 20px; }
+    
+    /* Back Button */
+    .back-btn { display: inline-block; margin-top: 15px; color: #777; font-size: 12px; text-decoration:none; }
 </style>
 """
 
@@ -142,7 +146,7 @@ HTML_PAGE = """
     <div class="overlay">
         <h1>העיר שלך! 👑</h1>
         <p>ניצחת בכל הרובעים. הכנופיות האחרות נמחקו.</p>
-        <a href="/reset" class="restart">התחל עונה חדשה</a>
+        <a href="/game4/reset" class="restart">התחל עונה חדשה</a>
     </div>
     {% endif %}
 
@@ -150,7 +154,7 @@ HTML_PAGE = """
     <div class="overlay">
         <h1 style="color: red">החוסלת! 💀</h1>
         <p>אין לך כסף ואין חיילים. המשחק נגמר.</p>
-        <a href="/reset" class="restart">נסה שוב</a>
+        <a href="/game4/reset" class="restart">נסה שוב</a>
     </div>
     {% endif %}
 
@@ -166,13 +170,15 @@ HTML_PAGE = """
             <hr>
             <div class="actions">
                 <h4>פעולות:</h4>
-                <a href="/recruit/5"><button>גייס 5 חייל (50$)</button></a>
-                <a href="/recruit/15"><button>גייס 15 חיילים (140$)</button></a>
+                <a href="/game4/recruit/5"><button>גייס 5 חייל (50$)</button></a>
+                <a href="/game4/recruit/15"><button>גייס 15 חיילים (140$)</button></a>
                 <br><br>
-                <a href="/next_turn"><button class="end-turn">סיים יום (קבל הכנסה) 🌙</button></a>
+                <a href="/game4/next_turn"><button class="end-turn">סיים יום (קבל הכנסה) 🌙</button></a>
                 <br>
                 <p style="font-size:12px; color:gray">סיום יום נותן כסף אך מחזק את האויב</p>
             </div>
+            
+            <a href="/" class="back-btn">יציאה לתפריט ראשי</a>
         </div>
 
         <!-- City Map -->
@@ -189,7 +195,7 @@ HTML_PAGE = """
                         🏰 הגנה משוערת: {{ z.defense }}<br>
                         💰 פוטנציאל: {{ z.income }}$
                         
-                        <form action="/attack/{{ z.id }}" method="post">
+                        <form action="/game4/attack/{{ z.id }}" method="post">
                             <button class="btn-attack">⚔️ שלח חיילים לכיבוש</button>
                         </form>
                     {% endif %}
@@ -217,7 +223,7 @@ def index():
 @app.route('/recruit/<int:amount>')
 def recruit(amount):
     cost = 10 * amount
-    if amount >= 15: cost = 140 # הנחת כמות
+    if amount >= 10: cost = 140 # הנחת כמות
     
     if gameState.money >= cost:
         gameState.money -= cost
@@ -225,26 +231,23 @@ def recruit(amount):
         gameState.log.insert(0, f"גייסת {amount} חיילים חדשים. עלות: {cost}$")
     else:
         gameState.log.insert(0, "❌ אין מספיק מזומן לגיוס.")
-    return redirect('/')
+    return redirect('/game4/')
 
 @app.route('/attack/<int:zone_id>', methods=['POST'])
 def attack(zone_id):
     target = next((z for z in gameState.zones if z['id'] == zone_id), None)
-    if not target or target['owner'] == 'player': return redirect('/')
+    if not target or target['owner'] == 'player': return redirect('/game4/')
 
     if gameState.soldiers <= 0:
         gameState.log.insert(0, "❌ אין לך חיילים להתקפה!")
-        return redirect('/')
+        return redirect('/game4/')
 
     # Combat Logic
-    # סיכויי הצלחה: היחס בין כמות התוקפים לכוח ההגנה
-    # אם תוקפים עם מעט מול הרבה - סיכוי נמוך. הרבה מול מעט - סיכוי גבוה.
     
     attack_force = gameState.soldiers
     defense_force = target['defense']
     
     # חישוב יחס קרב + רנדומליות
-    # בונוס רנדומלי לשני הצדדים (בין 0.8 ל-1.2)
     att_roll = attack_force * random.uniform(0.8, 1.2)
     def_roll = defense_force * random.uniform(0.8, 1.2)
 
@@ -252,31 +255,31 @@ def attack(zone_id):
 
     if att_roll > def_roll:
         # ניצחון
-        losses = int(defense_force * 0.3) # מאבדים קצת חיילים בקרב
+        losses = int(defense_force * 0.3) 
         gameState.soldiers = max(1, gameState.soldiers - losses)
         
         target['owner'] = 'player'
-        target['defense'] = 50 # איפוס הגנה לסטנדרט כשאנחנו כובשים
+        target['defense'] = 50 # איפוס הגנה
         
         gameState.log.insert(0, f"✅ ניצחון! כבשת את {target['name']}. איבדת {losses} חיילים. האזור שלך.")
         gameState.check_win_condition()
     else:
         # הפסד
-        losses = int(gameState.soldiers * 0.6) # מאבדים 60% מהצבא בבריחה
+        losses = int(gameState.soldiers * 0.6) 
         gameState.soldiers -= losses
         gameState.log.insert(0, f"💀 הפסד צורב. הכנופיה היריבה הדפה אותך. איבדת {losses} חיילים בנסיגה.")
 
-    return redirect('/')
+    return redirect('/game4/')
 
 @app.route('/next_turn')
 def next_turn():
     gameState.next_turn()
-    return redirect('/')
+    return redirect('/game4/')
 
 @app.route('/reset')
 def reset():
     gameState.reset()
-    return redirect('/')
+    return redirect('/game4/')
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
