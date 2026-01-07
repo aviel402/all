@@ -331,4 +331,284 @@ HTML = """
         --accent: #bc13fe;
         --accent-2: #ffd700; /* Gold */
         --hp-col: #ff3333;
-        -
+        --st-col: #00e5ff;
+        --text: #eee;
+    }
+    
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent;}
+    
+    body {
+        background: var(--main-bg); 
+        color: var(--text);
+        font-family: 'Rajdhani', sans-serif;
+        margin: 0; height: 100vh;
+        display: flex; flex-direction: column;
+        overflow: hidden;
+        background-image: radial-gradient(circle at 50% 10%, #2a0035, #000);
+    }
+    
+    /* 1. סטטוסים (HUD Top) */
+    .hud {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr 1fr;
+        gap: 10px;
+        padding: 10px;
+        background: rgba(0,0,0,0.5);
+        border-bottom: 1px solid var(--accent);
+        font-size: 1.1rem;
+        font-weight: bold;
+        text-shadow: 0 0 5px rgba(0,0,0,0.8);
+    }
+    .hud div { display: flex; align-items: center; justify-content: center; gap:5px;}
+    .hud span { font-family: monospace; font-size:1.2rem;}
+
+    /* 2. מסך ראשי */
+    .main-stage {
+        flex-grow: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 10px;
+        gap: 10px;
+        overflow: hidden;
+    }
+    
+    .map-frame {
+        width: 100%; max-width: 300px;
+        height: 160px;
+        background: #000;
+        border: 2px solid var(--accent);
+        border-radius: 12px;
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        box-shadow: 0 0 20px rgba(188, 19, 254, 0.2);
+    }
+    .map-grid { display:flex; flex-direction:column; gap:2px; }
+    .map-row { display:flex; gap:2px; }
+    .cell { width: 32px; height: 32px; display:flex; align-items:center; justify-content:center; font-size:18px; border-radius:4px;}
+    .known { background: #222; }
+    .player { background: var(--accent); border:1px solid #fff; box-shadow:0 0 10px var(--accent);}
+    .enemy-cell { background: #500; animation: blink 0.5s infinite; }
+    .fog { background: #111; opacity:0.1; }
+
+    /* לוג ההודעות */
+    .log-box {
+        flex-grow: 1;
+        width: 100%; max-width: 600px;
+        background: rgba(0,0,0,0.3);
+        border-radius: 8px;
+        padding: 10px;
+        overflow-y: auto;
+        font-size: 0.95rem;
+        border: 1px solid #333;
+    }
+    .msg { padding: 4px; margin-bottom: 2px; }
+    .msg.system { color: var(--accent-2); text-align:center; font-size:0.8rem; opacity:0.8;}
+    .msg.danger { color: #ff5555; background: rgba(50,0,0,0.3); border-right: 3px solid #f00;}
+    .msg.success { color: #00ff88; }
+    .msg.warning { color: orange; }
+
+    /* 3. לוח בקרה (Control Pad) */
+    .controls {
+        background: #11001c;
+        padding: 15px;
+        border-top: 2px solid #333;
+        display: grid;
+        grid-template-columns: 1fr 1.5fr; /* Dpad vs Actions */
+        gap: 20px;
+        align-items: center;
+        max-width: 800px; width:100%; margin:0 auto;
+    }
+
+    /* תיקון כיווני הלחצנים - אנחנו שמים אותם ב-LTR בכוח */
+    /* כך הימני הוא באמת מימין גם במסך עברי */
+    .d-pad {
+        direction: ltr; 
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        grid-template-rows: repeat(2, 1fr);
+        gap: 8px;
+        width: 140px; margin: 0 auto;
+    }
+    
+    .pad-btn {
+        width: 100%; aspect-ratio: 1;
+        background: #333;
+        border: none; border-bottom: 4px solid #111;
+        border-radius: 8px;
+        font-size: 24px; cursor: pointer;
+        display: flex; align-items: center; justify-content: center;
+        transition: 0.1s;
+    }
+    .pad-btn:active { border-bottom-width: 0; transform: translateY(4px); background:#555;}
+    
+    .pad-btn.up { grid-column: 2; grid-row: 1; background: #444;}
+    .pad-btn.left { grid-column: 1; grid-row: 2; }
+    .pad-btn.down { grid-column: 2; grid-row: 2; }
+    .pad-btn.right { grid-column: 3; grid-row: 2; }
+
+    /* כפתורי פעולה */
+    .action-pad {
+        display: grid; 
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+    }
+    
+    .act-btn {
+        padding: 12px; border-radius: 8px; border:none;
+        font-weight: bold; font-family: inherit;
+        font-size: 1rem; color: #fff; cursor: pointer;
+        text-shadow: 1px 1px 0 #000;
+        box-shadow: 0 4px 0 rgba(0,0,0,0.5);
+    }
+    .act-btn:active { box-shadow: 0 0 0; transform: translateY(4px); }
+    
+    .atk { background: linear-gradient(#d32f2f, #b71c1c); }
+    .use { background: linear-gradient(#7b1fa2, #4a148c); }
+    .inv { background: #333; border: 1px solid #555; }
+    .take { background: linear-gradient(#fbc02d, #f57f17); color:#000; text-shadow:none;}
+    .rest { background: #006064; grid-column: span 2;}
+
+    /* MODAL עבור התיק */
+    #inv-modal {
+        position: fixed; top:0; left:0; width:100%; height:100%;
+        background: rgba(0,0,0,0.9); z-index:99;
+        display:none; justify-content:center; align-items:center;
+    }
+    .modal-content {
+        background: #220022; border: 2px solid var(--accent);
+        padding: 20px; border-radius: 12px; width: 300px;
+        text-align:center;
+    }
+    .inv-list { display:flex; flex-direction:column; gap:10px; max-height:300px; overflow-y:auto; margin-top:10px;}
+    .inv-btn { 
+        padding: 10px; background:#444; border:1px solid #666; color:white; 
+        cursor:pointer; text-align:right; font-size:1rem;
+    }
+    .inv-btn:hover { background: var(--accent); }
+
+    @keyframes blink { 50% { opacity:0.5; } }
+</style>
+</head>
+<body>
+
+<!-- Status Top -->
+<div class="hud">
+    <div style="color:var(--hp-col)">❤️ <span id="hp">100</span></div>
+    <div style="color:var(--st-col)">⚡ <span id="st">100</span></div>
+    <div style="color:var(--accent-2)">🪙 <span id="gold">0</span></div>
+    <div style="color:#aaa">⭐ <span id="lvl">1</span></div>
+</div>
+
+<!-- Main Area -->
+<div class="main-stage">
+    <div class="map-frame" id="map-wrap">...</div>
+    <div style="color:#aaa; font-size:0.8rem; margin-top:-5px;" id="loc-text">טוען...</div>
+    <div class="log-box" id="log-wrap"></div>
+</div>
+
+<!-- Modal for Inventory -->
+<div id="inv-modal">
+    <div class="modal-content">
+        <h3 style="margin:0; color:var(--accent)">🎒 תיק ציוד</h3>
+        <p style="font-size:0.8rem; color:#aaa">לחץ לשימוש בחפץ</p>
+        <div class="inv-list" id="inv-list-target">
+            <!-- Items injected here -->
+        </div>
+        <button class="act-btn inv" style="margin-top:15px; width:100%" onclick="closeInv()">סגור</button>
+    </div>
+</div>
+
+<!-- Controls -->
+<div class="controls">
+    <!-- Directional Pad (LTR layout enforced) -->
+    <div class="d-pad">
+        <button class="pad-btn up" onclick="send('move',[0,1])">▲</button>
+        <button class="pad-btn left" onclick="send('move',[-1,0])">◀</button>
+        <button class="pad-btn down" onclick="send('move',[0,-1])">▼</button>
+        <button class="pad-btn right" onclick="send('move',[1,0])">▶</button>
+    </div>
+    
+    <!-- Action Pad -->
+    <div class="action-pad">
+        <button class="act-btn atk" onclick="send('attack')">⚔️ תקוף</button>
+        <button class="act-btn take" onclick="send('take')">✋ אסוף</button>
+        <button class="act-btn inv" onclick="openInv()">🎒 ציוד</button>
+        <button class="act-btn use" onclick="send('reset')" style="background:#444; color:#f66">↺ ריסט</button>
+        <button class="act-btn rest" onclick="send('rest')">💤 לנוח (התאוששות)</button>
+    </div>
+</div>
+
+<script>
+    const API = "{{ api }}";
+    
+    document.addEventListener("DOMContentLoaded", ()=> send('look'));
+
+    async function send(act, par=null) {
+        // רעד בזמן התקפה
+        if(act==='attack') document.body.style.animation = "shake 0.2s";
+        setTimeout(()=> document.body.style.animation = "", 200);
+
+        try {
+            let res = await fetch(API, {
+                method:'POST', headers:{'Content-Type':'application/json'},
+                body: JSON.stringify({action: act, param: par})
+            });
+            let d = await res.json();
+            
+            if(d.dead) alert("הפסדת!");
+            if(d.reload) location.reload();
+
+            // Render Status
+            if(d.stats) {
+                document.getElementById('hp').innerText = d.stats.hp;
+                document.getElementById('st').innerText = d.stats.st;
+                document.getElementById('gold').innerText = d.stats.gold;
+                document.getElementById('lvl').innerText = d.stats.lvl;
+            }
+
+            // Render Map & Log
+            if(d.hud) document.getElementById('map-wrap').innerHTML = d.hud;
+            if(d.loc) document.getElementById('loc-text').innerText = d.loc;
+            if(d.inv_html) document.getElementById('inv-list-target').innerHTML = d.inv_html;
+
+            let logC = document.getElementById('log-wrap');
+            logC.innerHTML = "";
+            d.log.forEach(l => {
+                logC.innerHTML += `<div class='msg ${l.type}'>${l.text}</div>`;
+            });
+            logC.scrollTop = logC.scrollHeight;
+
+        } catch(e) { console.error(e); }
+    }
+
+    function openInv() { 
+        document.getElementById('inv-modal').style.display='flex';
+        // Refresh to get updated list
+        send('look'); 
+    }
+    function closeInv() { document.getElementById('inv-modal').style.display='none'; }
+    
+    // Keybinds (Arrows)
+    document.onkeydown = function(e) {
+        if(e.key == "ArrowUp") send('move',[0,1]);
+        if(e.key == "ArrowDown") send('move',[0,-1]);
+        if(e.key == "ArrowLeft") send('move',[-1,0]);
+        if(e.key == "ArrowRight") send('move',[1,0]);
+    };
+    
+</script>
+<style>
+@keyframes shake {
+  0% { transform: translate(1px, 1px) rotate(0deg); }
+  25% { transform: translate(-1px, -2px) rotate(-1deg); }
+  50% { transform: translate(-3px, 0px) rotate(1deg); }
+  75% { transform: translate(3px, 2px) rotate(0deg); }
+  100% { transform: translate(1px, -1px) rotate(-1deg); }
+}
+</style>
+</body>
+</html>
+"""
+
+if __name__ == "__main__":
+    app.run(port=5006, debug=True)
