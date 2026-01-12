@@ -21,9 +21,6 @@ except ImportError: game3 = create_dummy_app("משחק 3")
 try: from app4 import app as game4
 except ImportError: game4 = create_dummy_app("משחק 4")
 
-try: from app5 import app as game5
-except ImportError: game5 = create_dummy_app("משחק 5")
-
 # app6 הוא המשחק ששלחתי לך כרגע (וודא ששמרת אותו כ-app6.py)
 try: from app6 import app as game6
 except ImportError: game6 = create_dummy_app("משחק 6 - ההרפתקה (לא נמצא הקובץ)")
@@ -179,11 +176,6 @@ MENU_HTML = """
             <h2>Underworld</h2>
             <div class="tag">פשע ומסתורין</div>
         </a>
-        <a href="/game5/" class="card">
-            <span class="emoji-icon">🛡️</span>
-            <h2>Iron Legion</h2>
-            <div class="tag">אסטרטגיה</div>
-        </a>
         <a href="/game6/" class="card">
             <span class="emoji-icon">🗝️</span>
             <h2>מבוך הצללים</h2>
@@ -208,7 +200,6 @@ app = DispatcherMiddleware(main_app, {
     '/game2': game2,
     '/game3': game3,
     '/game4': game4,
-    '/game5': game5,
     '/game6': game6  # משחק מבוך הצללים שלנו
 })
 
