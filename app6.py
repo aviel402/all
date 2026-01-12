@@ -4,217 +4,185 @@ import json
 from flask import Flask, render_template_string, request, jsonify, session, url_for
 
 # ==========================================
-# ⚙️ מסד נתונים עשיר (NPC, אויבים, אירועים)
+# 🌎 מאגר הנתונים (אינסופי)
 # ==========================================
-
-# אירועים רנדומליים בחדר
-EVENTS = [
-    {"msg": "💀 מצאת גופה של הרפתקן. לקחת את הזהב שלו.", "type": "gold", "val": 40},
-    {"msg": "✨ מעיין קסום! שתית ממנו והבראת.", "type": "heal", "val": 30},
-    {"msg": "🤮 אוויר רעיל ממלא את החדר. נחנקת קצת.", "type": "dmg", "val": 10},
-    {"msg": "🎒 מצאת תיק נטוש עם אספקה.", "type": "item", "val": "מנת קרב"},
-    {"msg": "🧘 פינה שקטה. נחת וצברת כוח.", "type": "stamina", "val": 40}
+BIOMES = [
+    {"name": "יער אפל", "icon": "🌲", "danger": 1},
+    {"name": "ביצות", "icon": "🐸", "danger": 2},
+    {"name": "מבצר נטוש", "icon": "🏰", "danger": 3},
+    {"name": "הר געש", "icon": "🌋", "danger": 4},
+    {"name": "בית קברות", "icon": "🪦", "danger": 2},
+    {"name": "כפר שקט", "icon": "🏡", "danger": 0},
+    {"name": "מערת הקריסטל", "icon": "💎", "danger": 3},
 ]
 
-# דמויות שאפשר לדבר איתן (NPC)
 NPCS = [
-    {"name": "סוחר זקן", "icon": "👳‍♂️", "lines": ["הכל למכירה, חבר.", "אל תלך לשם... המפלצות רעבות."]},
-    {"name": "מכשפה", "icon": "🧙‍♀️", "lines": ["אני מריחה את הפחד שלך.", "רוצה שיקוי? זה יעלה לך בנשמתך."]},
-    {"name": "רובוט שבור", "icon": "🤖", "lines": ["שגיאה 404... אנושיות לא נמצאה.", "ביפ. בופ. השמדה עצמית."]},
-    {"name": "ילד מסתורי", "icon": "👶", "lines": ["ראית את אמא שלי?", "המלך הגדול רואה הכל."]}
+    {"name": "סוחר דרכים", "lines": ["זהב פותח דלתות.", "רוצה שיקוי?"]},
+    {"name": "מכשפה עתיקה", "lines": ["העתיד שלך נראה... קצר.", "תן לי עין של דרקון ואתן לך כוח."]},
+    {"name": "אביר עייף", "lines": ["המלך מת מזמן.", "אל תרד לקומה התחתונה."]},
+    {"name": "קבצן", "lines": ["נדבה לאדון?", "ראיתי דברים איומים בחושך."]}
 ]
 
-# אויבים
 ENEMIES = [
-    {"name": "אורק לוחם", "icon": "👹", "hp": 30, "atk": 8, "xp": 20, "gold": 15},
-    {"name": "עכביש ענק", "icon": "🕷️", "hp": 15, "atk": 5, "xp": 10, "gold": 5},
-    {"name": "רוח רפאים", "icon": "👻", "hp": 40, "atk": 12, "xp": 35, "gold": 50},
-    {"name": "דרקון גור", "icon": "🐲", "hp": 80, "atk": 18, "xp": 100, "gold": 200}
+    {"name": "גובלין", "hp": 20, "atk": 5, "xp": 10},
+    {"name": "זאב רעב", "hp": 30, "atk": 8, "xp": 15},
+    {"name": "שלד", "hp": 40, "atk": 10, "xp": 20},
+    {"name": "דרקון זומבי (בוס)", "hp": 150, "atk": 25, "xp": 200},
 ]
 
 # ==========================================
-# 🧠 המנוע
+# ⚙️ מנוע המשחק
 # ==========================================
 
 app = Flask(__name__)
-# שיניתי מפתח כדי לאלץ איפוס של עוגיות ישנות אצל כל המשתמשים
-app.secret_key = 'rpg_final_fix_v2026' 
+app.secret_key = 'ultra_rpg_fix_final_v5'
 
-class Generator:
+class WorldGen:
     def create_room(self, x, y):
-        # חדר 0,0 תמיד בטוח
-        if x==0 and y==0: 
-            return {"name": "בסיס הבית", "type": "base", "icon": "🏠", "enemy": None, "npc": None, "items": [], "event": None}
+        # אזור התחלה בטוח
+        if x == 0 and y == 0:
+            return {"name": "בסיס הבית", "icon": "🛡️", "enemy": None, "npc": None, "items": []}
+
+        biome = random.choice(BIOMES)
+        
+        # 40% סיכוי לאויב
+        enemy = None
+        if random.random() < 0.4 and biome['danger'] > 0:
+            base_en = random.choice(ENEMIES)
+            enemy = base_en.copy()
+            enemy["hp"] += biome['danger'] * 5 # אויבים חזקים יותר באזורים מסוכנים
             
-        biome = random.choice(["יער", "מערה", "צינוק", "טירה", "ביוב"])
-        icon = random.choice(["🌲", "🗻", "🏯", "🕳️"])
-        
-        # בניית חדר
-        room = {
-            "name": f"{biome} ({x},{y})",
-            "type": "normal",
-            "icon": icon,
-            "enemy": None,
-            "npc": None,
-            "items": [],
-            "event": None
+        # 30% סיכוי ל-NPC
+        npc = None
+        if not enemy and random.random() < 0.3:
+            npc = random.choice(NPCS)
+
+        # 50% סיכוי לחפצים
+        items = []
+        if random.random() < 0.5:
+            items.append(random.choice(["שיקוי", "מטבע", "יהלום", "חרב", "מגן"]))
+
+        return {
+            "name": f"{biome['name']} ({x},{y})",
+            "icon": biome['icon'],
+            "enemy": enemy,
+            "npc": npc,
+            "items": items
         }
-
-        # מה יש בחדר? (Priority system)
-        roll = random.random()
-        
-        if roll < 0.15: # אירוע מיוחד
-            room["event"] = random.choice(EVENTS)
-            room["icon"] = "⚠️"
-        elif roll < 0.35: # NPC
-            base = random.choice(NPCS)
-            room["npc"] = base.copy()
-            room["icon"] = "💬"
-        elif roll < 0.70: # אויב
-            base = random.choice(ENEMIES)
-            room["enemy"] = base.copy()
-            room["icon"] = "💀"
-        else: # חדר רגיל עם חפצים
-            if random.random() < 0.5:
-                room["items"].append(random.choice(["תפוח", "שיקוי", "יהלום", "מפתח"]))
-
-        return room
 
 class Engine:
     def __init__(self, state=None):
-        # מנגנון תיקון עצמי: אם המידע פגום, מפרמט משחק
-        if not state or "stats" not in state or "map" not in state:
-            self.reset_state()
+        if not state:
+            self.state = {
+                "x": 0, "y": 0,
+                "hp": 100, "max_hp": 100,
+                "stamina": 100, "xp": 0, "level": 1, "gold": 0,
+                "inv": [],
+                "map": {},
+                "visited": ["0,0"],
+                "log": [{"text": "המערכת אותחלה. צא לדרך...", "type": "sys"}]
+            }
+            self.gen = WorldGen()
+            self.state["map"]["0,0"] = self.gen.create_room(0,0)
         else:
             self.state = state
-        self.gen = Generator()
+            self.gen = WorldGen()
 
-    def reset_state(self):
-        self.state = {
-            "x": 0, "y": 0,
-            "stats": {"hp": 100, "max_hp": 100, "st": 100, "xp": 0, "lvl": 1, "gold": 0},
-            "inv": [],
-            "map": {},
-            "visited": ["0,0"],
-            "log": [{"text": "המשחק אותחל בהצלחה. בהצלחה!", "type": "sys"}]
-        }
-        self.state["map"]["0,0"] = self.gen.create_room(0,0)
-
-    def key(self): return f"{self.state['x']},{self.state['y']}"
+    def get_pos(self): return f"{self.state['x']},{self.state['y']}"
     
-    def log(self, txt, t="game"): 
-        self.state["log"].append({"text": txt, "type": t})
+    def log(self, t, type="game"): self.state["log"].append({"text": t, "type": type})
 
-    # -- פעולות --
     def move(self, dx, dy):
-        s = self.state["stats"]
-        if s["st"] <= 0:
-            self.log("חסרה לך אנרגיה! נוח (R).", "danger")
+        if self.state["stamina"] <= 0:
+            self.log("אתה עייף מדי! (נוח - R)", "warning")
             return
         
         self.state["x"] += dx
         self.state["y"] += dy
-        s["st"] -= 2
+        self.state["stamina"] -= 2
         
-        k = self.key()
+        k = self.get_pos()
         if k not in self.state["map"]:
             self.state["map"][k] = self.gen.create_room(self.state['x'], self.state['y'])
         
         if k not in self.state["visited"]: self.state["visited"].append(k)
         
         r = self.state["map"][k]
-        
-        # טיפול אוטומטי באירועים
-        if r["event"]:
-            ev = r["event"]
-            self.log(ev["msg"], "sys")
-            if ev["type"] == "heal": s["hp"] = min(s["hp"]+ev["val"], s["max_hp"])
-            if ev["type"] == "dmg": s["hp"] -= ev["val"]
-            if ev["type"] == "gold": s["gold"] += ev["val"]
-            r["event"] = None # אירוע חד פעמי
-            
         self.log(f"זזת ל-{r['name']}", "game")
+        if r["enemy"]: self.log(f"⚠️ אויב! {r['enemy']['name']}", "danger")
 
     def attack(self):
-        r = self.state["map"][self.key()]
+        r = self.state["map"][self.get_pos()]
         if not r["enemy"]:
-            self.log("אין במי לתקוף.", "sys")
+            self.log("אין במי לתקוף.", "info")
             return
         
         e = r["enemy"]
-        dmg = random.randint(10, 20) + self.state["stats"]["lvl"]*2
+        dmg = random.randint(10, 20) + self.state["level"]
         e["hp"] -= dmg
-        self.log(f"💥 תקפת את {e['name']} ({dmg} נזק)", "game")
+        self.log(f"תקפת בעוצמה! {dmg} נזק.", "success")
         
         if e["hp"] <= 0:
-            self.log(f"🎉 ניצחת! קיבלת {e['gold']} זהב.", "success")
-            self.state["stats"]["gold"] += e["gold"]
-            self.state["stats"]["xp"] += e["xp"]
-            self.check_lvl()
+            self.log(f"🏆 ניצחת! קיבלת {e['xp']} XP.", "gold")
+            self.state["xp"] += e["xp"]
+            self.state["gold"] += random.randint(10, 50)
+            self.check_level_up()
             r["enemy"] = None
-            r["icon"] = "✔️"
         else:
-            p_dmg = max(1, e["atk"] - random.randint(0,2))
-            self.state["stats"]["hp"] -= p_dmg
-            self.log(f"האויב תקף חזרה! -{p_dmg} חיים", "danger")
+            p_dmg = e["atk"]
+            self.state["hp"] -= p_dmg
+            self.log(f"נפגעת! -{p_dmg} חיים.", "danger")
 
     def talk(self):
-        r = self.state["map"][self.key()]
+        r = self.state["map"][self.get_pos()]
         if r["npc"]:
-            line = random.choice(r["npc"]["lines"])
-            self.log(f"🗨️ {r['npc']['name']}: {line}", "sys")
+            self.log(f"🗣️ {r['npc']['name']}: {random.choice(r['npc']['lines'])}", "info")
         else:
-            self.log("אין פה אף אחד.", "game")
-            
+            self.log("אין פה אף אחד.", "info")
+
     def take(self):
-        r = self.state["map"][self.key()]
+        r = self.state["map"][self.get_pos()]
         if r["items"]:
             for i in r["items"]: self.state["inv"].append(i)
-            self.log(f"אספת: {', '.join(r['items'])}", "success")
+            self.log(f"לקחת: {', '.join(r['items'])}", "success")
             r["items"] = []
         else:
-            self.log("אין כאן כלום לאסוף.", "game")
+            self.log("אין כאן כלום.", "info")
             
     def rest(self):
-        s = self.state["stats"]
-        s["hp"] = min(s["hp"] + 10, s["max_hp"])
-        s["st"] = 100
-        self.log("💤 נחת והתמלאת אנרגיה.", "sys")
+        self.state["hp"] = min(self.state["hp"] + 20, self.state["max_hp"])
+        self.state["stamina"] = 100
+        self.log("💤 נחת וחידשת כוחות.", "sys")
         
-    def check_lvl(self):
-        s = self.state["stats"]
-        if s["xp"] >= s["lvl"] * 50:
-            s["lvl"] += 1
-            s["max_hp"] += 20
-            s["hp"] = s["max_hp"]
-            self.log(f"⭐ עלית לרמה {s['lvl']}!", "success")
+    def check_level_up(self):
+        if self.state["xp"] > self.state["level"] * 50:
+            self.state["level"] += 1
+            self.state["max_hp"] += 20
+            self.state["hp"] = self.state["max_hp"]
+            self.log(f"⬆️ עלית לרמה {self.state['level']}!", "gold")
 
     def render_map(self):
         cx, cy = self.state["x"], self.state["y"]
-        r = 2
+        r = 2 
         html = "<div class='grid'>"
-        for dy in range(r, -r-1, -1):
+        for dy in range(r, -r - 1, -1):
             html += "<div class='row'>"
-            for dx in range(-r, r+1):
+            for dx in range(-r, r + 1):
                 k = f"{cx+dx},{cy+dy}"
-                content = "<span class='fog'>☁️</span>"
                 
-                if dx==0 and dy==0: 
-                    content = "<span class='player'>🧑‍🚀</span>"
+                content = "🌫️"
+                bg_class = "fog"
+                
+                if dx == 0 and dy == 0:
+                    content = "👤"
+                    bg_class = "player-cell"
                 elif k in self.state["visited"]:
                     room = self.state["map"][k]
-                    # אייקון לפי תוכן החדר
-                    ic = room["icon"]
-                    bg_class = "room-base"
-                    if room["enemy"]: 
-                        ic = "👹"
-                        bg_class = "room-enemy"
-                    if room["npc"]:
-                        ic = "🙂"
-                        bg_class = "room-npc"
-                        
-                    content = f"<span class='room {bg_class}'>{ic}</span>"
-                html += f"<div class='cell'>{content}</div>"
+                    content = room["icon"]
+                    if room["enemy"]: content = "👿"
+                    bg_class = "room-cell"
+                
+                html += f"<div class='cell {bg_class}'>{content}</div>"
             html += "</div>"
         html += "</div>"
         return html
@@ -227,182 +195,217 @@ class Engine:
 @app.route("/")
 def index():
     if "uid" not in session: session["uid"] = str(uuid.uuid4())
-    return render_template_string(HTML)
+    # 📌 חישוב הכתובת האמיתית לשימוש ב-Javascript
+    api_url = url_for('game_action') 
+    return render_template_string(HTML, api_url=api_url)
 
-@app.route("/act", methods=["POST"])
-def act():
-    data = request.json
-    # אם קרתה שגיאה בטעינת המצב הקודם, יוצרים מנוע חדש שמאפס את עצמו
+@app.route("/action", methods=["POST"])
+def game_action():
+    data = request.json or {}
+    act = data.get("a")
+    val = data.get("v")
+
+    # ניסיון טעינת מצב, אם נכשל מתחילים חדש (מונע קריסות 500)
     try:
         eng = Engine(session.get("game"))
     except:
-        eng = Engine(None) # Force Reset
+        eng = Engine(None)
 
-    action = data.get("a")
-    val = data.get("v")
-
-    if eng.state["stats"]["hp"] <= 0 and action != "reset":
+    if eng.state["hp"] <= 0 and act != "reset":
         return jsonify({"dead": True})
 
-    if action == "move": eng.move(*val)
-    elif action == "attack": eng.attack()
-    elif action == "talk": eng.talk()
-    elif action == "take": eng.take()
-    elif action == "rest": eng.rest()
-    elif action == "reset": eng.reset_state()
+    if act == "move": eng.move(*val)
+    elif act == "attack": eng.attack()
+    elif act == "talk": eng.talk()
+    elif act == "take": eng.take()
+    elif act == "rest": eng.rest()
+    elif act == "reset": 
+        session.clear()
+        return jsonify({"reload": True})
     
     session["game"] = eng.state
     
-    room = eng.state["map"][eng.key()]
+    room = eng.state["map"][eng.get_pos()]
     return jsonify({
         "log": eng.state["log"],
         "hud": eng.render_map(),
-        "stats": eng.state["stats"],
-        "inv": eng.state["inv"],
-        "loc": room["name"]
+        "loc": room["name"],
+        "hp": eng.state["hp"],
+        "st": eng.state["stamina"],
+        "lvl": eng.state["level"],
+        "inv": eng.state["inv"]
     })
 
+
 # ==========================================
-# UI (HTML/CSS/JS)
+# FRONTEND HTML
 # ==========================================
 HTML = """
 <!DOCTYPE html>
 <html lang="he" dir="rtl">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>RPG v3</title>
+<title>Ultimate RPG</title>
+<link href="https://fonts.googleapis.com/css2?family=Assistant:wght@400;700&display=swap" rel="stylesheet">
 <style>
-    /* RESET & BASE */
-    * { box-sizing: border-box; }
-    body { background: #111; color: #ddd; font-family: 'Segoe UI', sans-serif; margin: 0; display: flex; height: 100vh; overflow: hidden; }
+    /* CSS Grid Layout */
+    body { background: #111; color: white; margin: 0; font-family: 'Assistant', sans-serif; height: 100vh; display: grid; grid-template-rows: 60px 1fr 240px; overflow: hidden; }
 
-    /* LAYOUT */
-    .container { display: flex; width: 100%; height: 100%; }
+    /* TOP BAR */
+    .top-bar { background: #222; border-bottom: 2px solid #333; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; }
+    .stat-badge { background: #333; padding: 5px 10px; border-radius: 5px; font-weight: bold; margin-left: 10px; border: 1px solid #444; font-size:14px;}
+    .map-radar { display: flex; flex-direction: column; align-items: center; }
+
+    /* MIDDLE (Log area) */
+    .log-area { background: #151515; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 8px; box-shadow: inset 0 0 20px #000; }
+    .msg { padding: 10px; border-radius: 5px; background: rgba(255,255,255,0.05); font-size: 15px; border-right: 3px solid #555;}
+    .sys { color: #81d4fa; text-align: center; border: none; background: none;}
+    .danger { background: rgba(255,0,0,0.15); border-right-color: #f44336; }
+    .success { background: rgba(0,255,0,0.1); border-right-color: #00e676; }
+    .gold { color: gold; text-align: center; font-size: 18px; border:none; text-shadow: 0 0 10px gold; }
     
-    .sidebar { width: 300px; background: #1a1a1a; padding: 15px; display: flex; flex-direction: column; gap: 15px; border-left: 2px solid #333; }
-    
-    .main { flex: 1; display: flex; flex-direction: column; position: relative; }
-    
-    /* MAP STYLE */
-    .map-frame { background: #000; padding: 10px; border-radius: 8px; border: 1px solid #444; display: flex; justify-content: center; }
-    .grid { display: flex; flex-direction: column; gap: 2px; }
-    .row { display: flex; gap: 2px; }
-    .cell { width: 40px; height: 40px; background: #222; display: flex; align-items: center; justify-content: center; border-radius: 4px; font-size: 20px;}
+    /* MAP CSS */
+    .grid { display: flex; flex-direction: column; gap: 4px; }
+    .row { display: flex; gap: 4px; }
+    .cell { width: 40px; height: 40px; background: #222; display: flex; align-items: center; justify-content: center; font-size: 20px; border-radius: 6px; box-shadow: 0 2px 2px rgba(0,0,0,0.5);}
+    .player-cell { background: #003300; border: 2px solid #0f0; }
+    .room-cell { background: #333; border: 1px solid #555; }
     .fog { opacity: 0.1; }
-    .player { border: 2px solid #0f0; background: #002200; border-radius: 50%; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;}
-    .room-base { background: #333; }
-    .room-enemy { background: #500; animation: blink 1s infinite; }
-    .room-npc { background: #005; }
-    
-    /* STATS */
-    .stat-row { display: flex; justify-content: space-between; border-bottom: 1px solid #333; padding: 5px 0; }
-    
-    /* LOG */
-    .log { flex: 1; overflow-y: auto; padding: 20px; background: #0d0d0d; display: flex; flex-direction: column; gap: 8px; }
-    .msg { padding: 8px 12px; border-radius: 4px; background: #222; font-size: 0.95rem; border-right: 3px solid transparent;}
-    .sys { border-color: #0ff; color: #0ff; }
-    .game { border-color: #888; color: #ccc; }
-    .danger { border-color: #f00; background: #300; }
-    .success { border-color: #0f0; color: #bfb; }
 
-    /* CONTROLS */
-    .controls { padding: 15px; background: #1a1a1a; display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; height: 160px; border-top: 2px solid #333;}
-    .btn { background: #333; color: white; border: none; border-radius: 6px; font-size: 24px; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; transition: 0.1s; }
-    .btn:active { background: #555; transform: scale(0.95); }
-    .btn span { font-size: 11px; margin-top: 4px; color: #aaa; font-family: sans-serif; }
+    /* BOTTOM CONTROLS */
+    .control-panel { background: #1c1c1c; padding: 10px; border-top: 2px solid #444; display: flex; gap: 10px; }
     
-    .btn-atk { background: #722; grid-column: span 2; }
-    .btn-move { background: #235; }
+    .d-pad-container { 
+        display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; width: 150px; 
+        /* מכריח את החיצים להיות בסידור נכון ללא קשר לעברית */
+        direction: ltr; 
+    }
     
-    @keyframes blink { 50% { opacity: 0.6; } }
+    .actions-container { flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
+    .btn { background: #333; border: 1px solid #555; color: white; border-radius: 8px; font-size: 18px; cursor: pointer; transition: 0.1s; }
+    .btn:active { background: #555; transform: scale(0.96); }
+    
+    /* Arrow specific positions in grid */
+    .btn-up { grid-column: 2; grid-row: 1; }
+    .btn-left { grid-column: 1; grid-row: 2; }
+    .btn-right { grid-column: 3; grid-row: 2; }
+    .btn-down { grid-column: 2; grid-row: 2; }
+    
+    .atk { background: #7f1d1d; } 
+    .rest { background: #0d47a1; }
+
+    /* INV Panel */
+    .inv-panel { position:absolute; bottom:250px; left:10px; background:rgba(0,0,0,0.8); padding:10px; border-radius:5px; border:1px solid #555; max-width:150px;}
+    .title-loc { font-size: 1.5rem; font-weight:bold; color:white; }
 
 </style>
 </head>
 <body>
-    <div class="container">
+
+    <!-- שורת סטטוס -->
+    <div class="top-bar">
+        <div style="display:flex;">
+            <div class="stat-badge">❤️ <span id="hp">100</span></div>
+            <div class="stat-badge">⚡ <span id="st">100</span></div>
+            <div class="stat-badge">⭐ <span id="lvl">1</span></div>
+        </div>
+        <div class="title-loc" id="loc">טוען...</div>
         
-        <!-- SIDEBAR: MAP & STATS -->
-        <div class="sidebar">
-            <h3 style="margin:0; text-align:center; color:#ccc;">WORLD MAP</h3>
-            <div class="map-frame" id="map-wrap"></div>
-            
-            <div style="margin-top:20px;">
-                <div class="stat-row"><span style="color:#e57373">❤️ חיים</span><span id="hp">100/100</span></div>
-                <div class="stat-row"><span style="color:#64b5f6">⚡ אנרגיה</span><span id="st">100</span></div>
-                <div class="stat-row"><span style="color:#ffd54f">🪙 זהב</span><span id="gold">0</span></div>
-                <div class="stat-row"><span style="color:#ba68c8">⭐ רמה</span><span id="lvl">1</span></div>
-            </div>
-            
-            <div style="margin-top:auto; background:#222; padding:10px; border-radius:5px; height: 100px; overflow-y:auto;">
-                <div style="font-size:12px; color:#aaa; margin-bottom:5px;">תיק:</div>
-                <div id="inv-wrap" style="font-size:13px;">ריק</div>
-            </div>
-            <button onclick="send('reset')" style="background:#b33; color:white; border:none; padding:10px; cursor:pointer;">איפוס משחק</button>
+        <div class="map-radar" id="map-target"></div>
+    </div>
+
+    <!-- לוג ראשי -->
+    <div class="log-area" id="log-target">
+        <div class="msg sys">המערכת מנסה להתחבר...</div>
+    </div>
+    
+    <div class="inv-panel">
+        <small style="color:#aaa">תיק ציוד:</small>
+        <div id="inv-target" style="font-size:12px;">ריק</div>
+    </div>
+
+    <!-- בקרה -->
+    <div class="control-panel">
+        
+        <div class="actions-container">
+            <button class="btn atk" onclick="send('attack')">⚔️ תקיפה</button>
+            <button class="btn" onclick="send('talk')">💬 דבר</button>
+            <button class="btn" onclick="send('take')">✋ אסוף</button>
+            <button class="btn rest" onclick="send('rest')">💤 לנוח</button>
+            <button class="btn" onclick="send('reset')" style="background:#444; font-size:12px">🔄</button>
         </div>
         
-        <!-- MAIN: LOG & CONTROLS -->
-        <div class="main">
-            <div style="padding:10px; background:#222; text-align:center; font-weight:bold;" id="loc-name">...</div>
-            <div class="log" id="log-wrap"></div>
-            
-            <div class="controls">
-                <button class="btn btn-move" onclick="send('move',[0,1])">⬆️<span>צפון</span></button>
-                <button class="btn btn-move" onclick="send('move',[0,-1])">⬇️<span>דרום</span></button>
-                <button class="btn btn-move" onclick="send('move',[1,0])">➡️<span>מזרח</span></button>
-                <button class="btn btn-move" onclick="send('move',[-1,0])">⬅️<span>מערב</span></button>
-                
-                <button class="btn btn-atk" onclick="send('attack')">⚔️<span>תקוף</span></button>
-                <button class="btn" onclick="send('talk')">💬<span>דבר</span></button>
-                <button class="btn" onclick="send('take')">✋<span>קח</span></button>
-            </div>
+        <div class="d-pad-container">
+            <button class="btn btn-up" onclick="send('move',[0,1])">⬆️</button>
+            <button class="btn btn-left" onclick="send('move',[-1,0])">⬅️</button>
+            <button class="btn btn-down" onclick="send('move',[0,-1])">⬇️</button>
+            <button class="btn btn-right" onclick="send('move',[1,0])">➡️</button>
         </div>
+
     </div>
 
 <script>
+    const API = "{{ api_url }}"; // מוזרק מפייתון בצורה דינמית
+
     document.addEventListener("DOMContentLoaded", () => send("look"));
 
     async function send(action, val=null) {
+        let logBox = document.getElementById("log-target");
+        
         try {
-            let res = await fetch('/act', {
+            let res = await fetch(API, {
                 method:'POST', 
                 headers:{'Content-Type':'application/json'},
                 body:JSON.stringify({a: action, v: val})
             });
+            
+            // הגנה ממסך שחור במקרה של שגיאת שרת
+            if (res.status != 200) {
+                logBox.innerHTML += `<div class="msg danger">שגיאת שרת (${res.status}). נסה לאפס משחק.</div>`;
+                return;
+            }
+
             let d = await res.json();
             
-            if (d.dead) { alert("Game Over! starting new game."); send("reset"); return; }
+            if (d.dead) { 
+                alert("Game Over! מתת. מתחילים מחדש."); 
+                send('reset'); 
+                return; 
+            }
             if (d.reload) location.reload();
 
-            // Render Layout
-            document.getElementById("hp").innerText = d.stats.hp + "/" + d.stats.max_hp;
-            document.getElementById("st").innerText = d.stats.st;
-            document.getElementById("gold").innerText = d.stats.gold;
-            document.getElementById("lvl").innerText = d.stats.lvl;
-            document.getElementById("loc-name").innerText = d.loc;
-            document.getElementById("map-wrap").innerHTML = d.hud;
-            document.getElementById("inv-wrap").innerText = d.inv.length ? d.inv.join(", ") : "ריק";
+            // עדכונים למסך
+            document.getElementById("hp").innerText = d.hp;
+            document.getElementById("st").innerText = d.st;
+            document.getElementById("lvl").innerText = d.lvl;
+            document.getElementById("loc").innerText = d.loc;
+            document.getElementById("map-target").innerHTML = d.hud;
+            document.getElementById("inv-target").innerText = d.inv.length ? d.inv.join(", ") : "ריק";
 
-            // Logs
-            let l = document.getElementById("log-wrap");
-            l.innerHTML = "";
+            // רינדור הודעות ללוג
+            logBox.innerHTML = "";
             d.log.forEach(item => {
-                l.innerHTML += `<div class="msg ${item.type}">${item.text}</div>`;
+                logBox.innerHTML += `<div class="msg ${item.type}">${item.text}</div>`;
             });
-            l.scrollTop = l.scrollHeight;
+            logBox.scrollTop = logBox.scrollHeight;
             
-        } catch(e) { console.error("Error:", e); }
+        } catch(e) { 
+            console.error(e);
+            logBox.innerHTML += `<div class="msg danger">שגיאת רשת.</div>`;
+        }
     }
     
-    // Keybinds
-    document.onkeydown = function(e) {
-        let k = e.key;
-        if(k=="ArrowUp") send('move',[0,1]);
-        if(k=="ArrowDown") send('move',[0,-1]);
-        if(k=="ArrowLeft") send('move',[-1,0]);
-        if(k=="ArrowRight") send('move',[1,0]);
-        if(k==" ") send('attack');
-        if(k=="e" || k=="Enter") send('take');
-    };
+    // שליטה במקלדת
+    window.addEventListener('keydown', (e) => {
+        const k = e.key;
+        if(k === "ArrowUp") send('move',[0,1]);
+        if(k === "ArrowDown") send('move',[0,-1]);
+        if(k === "ArrowLeft") send('move',[-1,0]);
+        if(k === "ArrowRight") send('move',[1,0]);
+        if(k === " ") send('attack');
+        if(k === "e" || k === "Enter") send('take');
+    });
 </script>
 </body>
 </html>
