@@ -137,7 +137,7 @@ class Engine:
     # --- תנועה ---
     def move(self, dx, dy):
         self.state["y"] += dx
-        self.state["z"] += dy
+        self.state["x"] += dy
         k = self.pos()
         
         # אם החדר לא קיים, יוצרים אותו
