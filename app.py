@@ -18,7 +18,7 @@ except ImportError: game2 = create_dummy_app("משחק 2")
 try: from app3 import app as game3
 except ImportError: game3 = create_dummy_app("משחק 3")
 
-try: from app4 import app as game5
+try: from app5 import app as game5
 except ImportError: game5 = create_dummy_app("משחק 5")
 
 # app6 הוא המשחק ששלחתי לך כרגע (וודא ששמרת אותו כ-app6.py)
