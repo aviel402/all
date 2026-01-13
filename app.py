@@ -174,11 +174,18 @@ MENU_HTML = """
             <h2>Genesis</h2>
             <div class="tag">מסע בחלל</div>
         </a>
+        <a href="/game4/" class="card">
+            <span class="emoji-icon">4</span>
+            <h2>4</h2>
+            <div class="tag">4</div>
+        </a>
+
         <a href="/game5/" class="card">
             <span class="emoji-icon">⚔️</span>
             <h2>IRON LEGION</h2>
             <div class="tag">מלחמות</div>
         </a>
+
         <a href="/game6/" class="card">
             <span class="emoji-icon">🗝️</span>
             <h2>מבוך הצללים</h2>
