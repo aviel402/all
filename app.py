@@ -186,7 +186,7 @@ MENU_HTML = """
         </a>
 
         <a href="/game5/" class="card">
-            <span class="emoji-icon">⚔️</span>
+            <span class="emoji-icon">🔫</span>
             <h2>IRON LEGION</h2>
             <div class="tag">מלחמות</div>
         </a>
