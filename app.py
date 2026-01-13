@@ -24,9 +24,12 @@ except ImportError: game4 = create_dummy_app("משחק 4")
 try: from app5 import app as game5
 except ImportError: game5 = create_dummy_app("משחק 5")
 
-# app6 הוא המשחק ששלחתי לך כרגע (וודא ששמרת אותו כ-app6.py)
 try: from app6 import app as game6
 except ImportError: game6 = create_dummy_app("משחק 6 - ההרפתקה (לא נמצא הקובץ)")
+    
+try: from app7 import app as game7
+except ImportError: game7 = create_dummy_app("משחק 7")
+
 
 
 # --- הלאוצ'ר הראשי ---
@@ -100,7 +103,7 @@ MENU_HTML = """
             position: relative;
             border: 1px solid rgba(255,255,255,0.05);
             overflow: hidden;
-            box-shadow: 0 10px 20px rgba(0,0,0,0.3);
+            box-shadow: 0 10px 20px rgba(0,0,0,1.3);
         }
 
         .card:hover {
@@ -113,10 +116,10 @@ MENU_HTML = """
         .card::before {
             content: '';
             position: absolute;
-            top: 0; left: 0; right: 0; height: 4px;
+            top: 0; left: 0; right: 0; height: 4.5px;
             background: linear-gradient(90deg, var(--primary), var(--accent));
             opacity: 0;
-            transition: 0.3s;
+            transition: 0.35s;
         }
 
         .card:hover::before { opacity: 1; }
@@ -135,7 +138,7 @@ MENU_HTML = """
         .card h2 {
             margin: 10px 0;
             font-size: 1.8rem;
-            font-weight: 700;
+            font-weight: 730;
         }
 
         .tag {
@@ -190,6 +193,12 @@ MENU_HTML = """
             <span class="emoji-icon">🗝️</span>
             <h2>מבוך הצללים</h2>
             <div class="tag">הרפתקה אפלה</div>
+        </a>
+
+        <a href="/game7/" class="card">
+            <span class="emoji-icon">🔥</span>
+            <h2>PROXIMA COMMAND</h2>
+            <div class="tag">לחץ, קבלת החלטות וניהול משאבים</div>
         </a>
     </div>
 
