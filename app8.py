@@ -1,412 +1,394 @@
-import json
-import uuid
-import time
 import random
-import datetime
-from flask import Flask, request, render_template_string, jsonify, make_response
+import uuid
+from flask import Flask, render_template_string, request, jsonify, session, url_for
 
 app = Flask(__name__)
-app.secret_key = "chrono_master_key"
+app.secret_key = 'parasite_game_v1'
 
-DB_FILE = "chrono_db.json"
+# ==========================================
+# 🧬 מאגר גופים (Hosts)
+# ==========================================
+# לכל גוף יש יכולות שונות. המטרה: להחליף גופים בהתאם למכשול.
+HOSTS_DB = {
+    "blob": {"name": "עיסה ירוקה", "icon": "🦠", "max_hp": 10, "atk": 1, "desc": "צורת הבסיס. חלש מאוד."},
+    "rat": {"name": "עכברוש", "icon": "🐀", "max_hp": 15, "atk": 2, "desc": "מהיר, יכול לעבור בתעלות."},
+    "guard": {"name": "שומר אנושי", "icon": "👮", "max_hp": 50, "atk": 10, "desc": "יכול להשתמש בנשק חם."},
+    "beast": {"name": "מפלצת ביוב", "icon": "👹", "max_hp": 100, "atk": 20, "desc": "חזק בטירוף, אבל איטי."},
+    "robot": {"name": "רובוט סיור", "icon": "🤖", "max_hp": 40, "atk": 8, "desc": "חסין לרעל, לא נושם."},
+    "boss": {"name": "המפקד העליון", "icon": "😎", "max_hp": 200, "atk": 30, "desc": "המטרה הסופית."}
+}
 
-# --- ניהול דאטהבייס ---
-def load_db():
-    default_db = {
-        "users": {},
-        "daily_data": {
-            "date": "",
-            "seed": 0,
-            "leaderboard": [] # list of {name, time}
+# ==========================================
+# 🧠 מנוע המשחק
+# ==========================================
+class Engine:
+    def __init__(self, state=None):
+        if not state:
+            self.state = {
+                # נתונים של הטפיל (השחקן)
+                "host": "blob", # הגוף הנוכחי
+                "hp": 10,
+                "x": 0, "y": 0,
+                "kills": 0,
+                "is_dead": False, # האם הגוף הנוכחי מת?
+                
+                # עולם
+                "map": {},
+                "visited": ["0,0"],
+                "log": [{"text": "התעוררת כעיסה ירוקה. מצא גוף מארח מהר!", "type": "sys"}]
+            }
+            # יצירת חדר ראשון עם עכברוש (כדי שיהיה על מי להשתלט)
+            self.create_room(0, 0, force_type="rat")
+        else:
+            self.state = state
+
+    def pos(self): return f"{self.state['x']},{self.state['y']}"
+    
+    def log(self, txt, t="game"): 
+        # שומר רק 30 הודעות אחרונות
+        self.state["log"].append({"text": txt, "type": t})
+        if len(self.state["log"]) > 30: self.state["log"].pop(0)
+
+    # יצירת חדר עם אויבים שונים (שיהפכו לגופים פוטנציאליים)
+    def create_room(self, x, y, force_type=None):
+        k = f"{x},{y}"
+        if k in self.state["map"]: return
+
+        enemies = []
+        # בחדר רגיל יש סיכוי לגוף חדש
+        if force_type:
+            types = [force_type]
+        else:
+            # בוחרים אויבים רנדומליים, אבל לא הבוס מיד
+            opts = ["rat", "rat", "guard", "robot", "beast"]
+            count = random.randint(1, 2)
+            types = [random.choice(opts) for _ in range(count)]
+
+        for t in types:
+            data = HOSTS_DB[t]
+            enemies.append({
+                "type": t,
+                "name": data["name"],
+                "icon": data["icon"],
+                "hp": data["max_hp"],
+                "max_hp": data["max_hp"],
+                "atk": data["atk"]
+            })
+
+        self.state["map"][k] = {
+            "enemies": enemies,
+            "items": []
         }
-    }
-    if not os_path_exists(DB_FILE): return default_db
-    try:
-        with open(DB_FILE, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    except: return default_db
 
-def save_db(data):
-    with open(DB_FILE, 'w', encoding='utf-8') as f:
-        json.dump(data, f, ensure_ascii=False)
+    def move(self, dx, dy):
+        # אי אפשר לזוז אם אתה "רוח רפאים" (גוף מת)
+        if self.state["is_dead"]:
+            self.log("הגוף שלך מושמד! אתה חייב להשתלט על גוף חדש כדי לזוז.", "danger")
+            return
 
-def os_path_exists(path):
-    import os
-    return os.path.exists(path)
+        self.state["x"] += dx
+        self.state["y"] += dy
+        k = self.pos()
+        
+        if k not in self.state["map"]:
+            self.create_room(self.state["x"], self.state["y"])
+        
+        self.state["visited"].append(k)
+        
+        enemies = self.state["map"][k]["enemies"]
+        names = [e["name"] for e in enemies]
+        
+        msg = f"הגעת לחדר ({self.state['x']}, {self.state['y']})."
+        if names: msg += f" יש כאן: {', '.join(names)}."
+        self.log(msg, "game")
 
-def get_today_str():
-    return datetime.datetime.now().strftime("%Y-%m-%d")
+    def attack(self, target_idx):
+        if self.state["is_dead"]: return # אי אפשר לתקוף כרוח
 
-# --- לוגיקת אתגר יומי ---
-def check_daily_reset(db):
-    today = get_today_str()
-    # אם התאריך השתנה מאז הפעם האחרונה שנשמר
-    if db['daily_data']['date'] != today:
-        print(f"🔄 מתחיל יום חדש: {today}")
-        db['daily_data'] = {
-            "date": today,
-            "seed": random.randint(1000, 999999), # המפתח לאתגר הזהה לכולם
-            "leaderboard": []
-        }
-        # איפוס סטטוס "שיחק היום" למשתמשים
-        for uid in db['users']:
-            db['users'][uid]['played_today'] = False
-        save_db(db)
+        r = self.state["map"][self.pos()]
+        if not r["enemies"] or target_idx >= len(r["enemies"]):
+            self.log("אין את מי לתקוף.", "sys")
+            return
 
-# --- Routes ---
+        enemy = r["enemies"][target_idx]
+        current_host = HOSTS_DB[self.state["host"]]
+        
+        # התקפת השחקן
+        dmg = current_host["atk"] + random.randint(-2, 2)
+        enemy["hp"] -= dmg
+        self.log(f"תקפת את {enemy['name']} ({dmg} נזק).", "success")
 
-@app.route('/')
+        # אם האויב מת - הוא נעלם (אי אפשר להשתלט על גופה גמורה, אלא אם זה היה מנגנון אחר)
+        if enemy["hp"] <= 0:
+            self.log(f"הרגת את ה{enemy['name']}. הגופה שלו נהרסה ולא שימושית יותר.", "info")
+            r["enemies"].pop(target_idx)
+            self.state["kills"] += 1
+            return
+
+        # אויב מחזיר מלחמה
+        e_dmg = enemy["atk"] + random.randint(-1, 3)
+        self.state["hp"] -= e_dmg
+        
+        if self.state["hp"] <= 0:
+            self.state["hp"] = 0
+            self.state["is_dead"] = True
+            self.log("🚨 הגוף המארח הושמד! אתה במצב טפיל חופשי!", "critical")
+            self.log("בחר גוף חדש בחדר כדי להשתלט עליו (INFECT)!", "critical")
+        else:
+            self.log(f"{enemy['name']} תקף חזרה! ירדו {e_dmg} חיים.", "danger")
+
+    # === המכניקה החדשה: השתלטות (Parasite Jump) ===
+    def infect(self, target_idx):
+        # אפשר להשתלט רק אם אתה "מת" (בלי גוף), או בתור מהלך מיוחד (אופציונלי)
+        if not self.state["is_dead"]:
+            self.log("אתה כבר בתוך גוף! (צריך שהגוף ימות כדי לעבור)", "sys")
+            return
+
+        r = self.state["map"][self.pos()]
+        if not r["enemies"]:
+            self.log("אין גופים בחדר! הטפיל מת מחוסר חמצן... (Game Over סופי)", "critical")
+            # כאן זה באמת גיים אובר כי אין לאן לקפוץ
+            return "real_death"
+
+        # לוקחים את האויב
+        target = r["enemies"][target_idx]
+        
+        # מעבירים את הנתונים שלו לשחקן
+        self.state["host"] = target["type"]
+        self.state["hp"] = target["hp"] # מקבלים את החיים שנשארו לו
+        
+        # מסירים אותו מרשימת האויבים (כי הוא עכשיו השחקן)
+        old_name = target["name"]
+        r["enemies"].pop(target_idx)
+        
+        self.state["is_dead"] = False
+        self.log(f"🧬 השתלטות מוצלחת! אתה עכשיו {old_name}.", "bio")
+        self.log(f"יכולות חדשות: {HOSTS_DB[self.state['host']]['desc']}", "info")
+
+# ==========================================
+# שרת
+# ==========================================
+@app.route("/")
 def index():
-    return render_template_string(HTML)
+    if "uid" not in session: session["uid"] = str(uuid.uuid4())
+    api = url_for("update")
+    return render_template_string(UI, api=api)
 
-@app.route('/api/init')
-def init_game():
-    db = load_db()
-    check_daily_reset(db)
+@app.route("/api", methods=["POST"])
+def api():
+    d = request.json
+    try:
+        eng = Engine(session.get("game_p"))
+    except:
+        eng = Engine(None)
+
+    act = d.get("a")
+    val = d.get("v") # במקרה של תקיפה/הדבקה זה האינדקס של האויב
+
+    if act == "reset": 
+        eng = Engine(None)
+    elif act == "move": 
+        eng.move(*val)
+    elif act == "attack": 
+        eng.attack(val)
+    elif act == "infect": 
+        res = eng.infect(val)
+        if res == "real_death":
+            return jsonify({"game_over": True})
+
+    session["game_p"] = eng.state
     
-    uid = request.cookies.get('user_id')
-    user = None
-    
-    if uid and uid in db['users']:
-        user = db['users'][uid]
-    
-    # יצירת הלוח הזהה לכולם על סמך ה-Seed היומי
-    seed = db['daily_data']['seed']
-    # משתמשים ב-Random של פייתון עם הסיד כדי לקבל את אותו סדר תמיד
-    rng = random.Random(seed)
-    numbers = list(range(1, 26)) # מספרים 1 עד 25
-    rng.shuffle(numbers)
-    
-    leaderboard = sorted(db['daily_data']['leaderboard'], key=lambda x: x['time'])[:10]
+    # נתונים לרינדור
+    room = eng.state["map"][eng.pos()]
+    host_data = HOSTS_DB[eng.state["host"]]
     
     return jsonify({
-        "grid": numbers,
-        "date": db['daily_data']['date'],
-        "user": user,
-        "leaderboard": leaderboard
+        "log": eng.state["log"],
+        "enemies": room["enemies"], # רשימת האויבים הנוכחית
+        "player": {
+            "hp": eng.state["hp"],
+            "max": host_data["max_hp"],
+            "name": host_data["name"],
+            "icon": host_data["icon"],
+            "is_dead": eng.state["is_dead"] # הנתון הקריטי לממשק
+        },
+        "pos": eng.pos()
     })
 
-@app.route('/api/register', methods=['POST'])
-def register():
-    name = request.json.get('name')
-    if not name: return jsonify({"error": "חובה להזין שם"}), 400
-    
-    db = load_db()
-    uid = str(uuid.uuid4())
-    
-    db['users'][uid] = {
-        "name": name,
-        "best_all_time": None,
-        "games_played": 0,
-        "played_today": False
-    }
-    save_db(db)
-    
-    resp = make_response(jsonify({"success": True}))
-    resp.set_cookie('user_id', uid, max_age=60*60*24*365)
-    return resp
-
-@app.route('/api/submit', methods=['POST'])
-def submit():
-    uid = request.cookies.get('user_id')
-    finish_time = request.json.get('time') # זמן בשניות (למשל 12.45)
-    
-    if not finish_time: return jsonify({"error": "שגיאה בנתונים"})
-    
-    db = load_db()
-    check_daily_reset(db) # ליתר ביטחון
-    
-    if uid not in db['users']: return jsonify({"error": "משתמש לא רשום"})
-    
-    user = db['users'][uid]
-    
-    # מניעת רמאות בסיסית (אי אפשר להגיש פעמיים ביום)
-    if user.get('played_today'):
-        return jsonify({"error": "כבר שיחקת היום! נתראה מחר."})
-    
-    # עדכון סטטיסטיקות
-    user['played_today'] = True
-    user['games_played'] += 1
-    
-    # שיא אישי
-    if user['best_all_time'] is None or finish_time < user['best_all_time']:
-        user['best_all_time'] = finish_time
-    
-    # הוספה ללוח המובילים היומי
-    entry = {
-        "name": user['name'],
-        "time": finish_time,
-        "rank": 0 # יחושב בהמשך
-    }
-    db['daily_data']['leaderboard'].append(entry)
-    
-    save_db(db)
-    
-    return jsonify({"success": True, "time": finish_time})
-
-# --- ממשק HTML/JS/CSS ---
-
-HTML = """
+# ==========================================
+# UI - מותאם למצב טפיל
+# ==========================================
+UI = """
 <!DOCTYPE html>
 <html lang="he" dir="rtl">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-<title>ChronoDaily</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PARASITE: ZERO</title>
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Rubik:wght@400;700;900&display=swap');
+    body { background: #0f1208; color: #ccffaa; font-family: monospace; margin: 0; height: 100vh; display:flex; flex-direction:column; }
+    
+    /* BIO UI Style */
+    .bio-bar { 
+        background: #1a2210; padding: 10px; border-bottom: 2px solid #5f9ea0; 
+        display: flex; justify-content: space-between; align-items: center;
+        box-shadow: 0 0 15px rgba(95, 158, 160, 0.3);
+    }
+    .bio-heart { color: #f00; font-size: 24px; animation: beat 1s infinite; display:inline-block;}
+    .bio-ghost { color: #888; font-size: 24px; animation: float 2s infinite; }
+    
+    .screen-danger { 
+        border: 4px solid red; box-shadow: inset 0 0 50px red;
+    }
 
-body {
-    background-color: #121214; color: white; font-family: 'Rubik', sans-serif;
-    margin: 0; padding: 10px; display: flex; flex-direction: column; align-items: center; min-height: 100vh;
-    overflow-x: hidden;
-}
+    .main-view { flex: 1; display: grid; grid-template-rows: 1fr 1fr; gap: 10px; padding: 10px; overflow:hidden;}
+    
+    /* Enemy list as visual cards */
+    .scene-view { 
+        border: 1px solid #344; background: #0a0e05; padding: 10px; border-radius: 8px;
+        display: flex; gap: 10px; align-items: center; justify-content: center; flex-wrap: wrap; overflow-y:auto;
+    }
+    
+    /* Enemies look different if you are dead (they become Hosts) */
+    .enemy-card { 
+        width: 100px; height: 120px; background: #222; border: 1px solid #555; 
+        display: flex; flex-direction: column; align-items: center; justify-content: space-around;
+        cursor: pointer; transition: 0.2s; position:relative;
+    }
+    .enemy-card:hover { transform: scale(1.05); border-color: white;}
+    
+    /* כפתור על האויב משתנה לפי המצב */
+    .action-btn { 
+        width: 100%; border: none; padding: 5px; color: white; cursor: pointer; font-weight: bold;
+    }
+    .btn-attack { background: #822; }
+    .btn-infect { background: #282; animation: glow 0.8s infinite alternate;} /* כשמתים זה זוהר בירוק */
 
-/* UI COMPONENTS */
-.header { width: 100%; max-width: 500px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
-.logo { font-size: 24px; font-weight: 900; background: linear-gradient(45deg, #00f260, #0575e6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-.timer { font-size: 32px; font-weight: bold; font-variant-numeric: tabular-nums; color: #fff; }
+    /* LOG */
+    .log-view { 
+        border: 1px solid #344; background: #000; padding: 10px; overflow-y: auto; font-size: 14px;
+        font-family: 'Courier New', Courier, monospace;
+    }
+    .msg { margin-bottom: 4px; }
+    .msg.sys { color: #5ff; }
+    .msg.critical { color: yellow; background: #500; font-weight:bold; padding: 5px; border: 1px dashed red;}
+    .msg.bio { color: #0f0; }
+    .msg.danger { color: #f55; }
 
-.container { max-width: 500px; width: 100%; }
+    /* CONTROLS */
+    .controls { padding: 10px; background: #111; display: flex; gap: 10px; justify-content: center; }
+    .nav-btn { font-size: 24px; padding: 15px; width: 60px; background: #223; color: white; border: 1px solid #445; border-radius: 8px; cursor: pointer;}
+    .nav-btn:disabled { opacity: 0.3; cursor: not-allowed; }
 
-/* GAME GRID */
-.grid {
-    display: grid;
-    grid-template-columns: repeat(5, 1fr);
-    gap: 8px;
-    margin-bottom: 20px;
-    perspective: 1000px;
-}
-
-.cell {
-    background: #1e1e24;
-    aspect-ratio: 1;
-    border-radius: 8px;
-    display: flex; justify-content: center; align-items: center;
-    font-size: 20px; font-weight: bold; cursor: pointer;
-    box-shadow: 0 4px 0 #111;
-    transition: transform 0.1s, background 0.2s;
-    user-select: none;
-}
-.cell:active { transform: translateY(4px); box-shadow: none; }
-.cell.correct { background: #00e676; color: black; opacity: 0; transform: scale(0.5); pointer-events: none; }
-.cell.wrong { animation: shake 0.3s; background: #ff1744; }
-
-@keyframes shake { 0%{transform: translateX(0)} 25%{transform: translateX(5px)} 75%{transform: translateX(-5px)} 100%{transform: translateX(0)} }
-
-/* LOGIN & LEADERBOARD */
-.card { background: #202024; padding: 20px; border-radius: 16px; text-align: center; margin-bottom: 15px; border: 1px solid #333; }
-input { background: #121214; border: 1px solid #444; color: white; padding: 12px; font-size: 18px; border-radius: 8px; width: 80%; text-align: center; }
-button { margin-top: 15px; background: #007bff; color: white; padding: 12px 30px; border: none; border-radius: 8px; font-size: 18px; font-weight: bold; cursor: pointer; }
-
-.rank-row { display: flex; justify-content: space-between; padding: 10px; border-bottom: 1px solid #333; }
-.rank-row:nth-child(1) { color: gold; font-weight: 900; }
-.rank-row:nth-child(2) { color: silver; font-weight: bold; }
-.rank-row:nth-child(3) { color: #cd7f32; font-weight: bold; }
-
-.overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 100; display: none; justify-content: center; align-items: center; flex-direction: column; }
-.big-score { font-size: 60px; font-weight: 900; color: #00e676; margin: 10px; }
-
+    @keyframes beat { 0%{transform:scale(1);} 50%{transform:scale(1.2);} 100%{transform:scale(1);} }
+    @keyframes glow { from{background: #282;} to{background: #4f4;} }
 </style>
 </head>
-<body>
+<body id="bodybox">
 
-    <div class="header">
-        <div class="logo">ChronoDaily</div>
-        <div class="timer" id="timer">0.000</div>
+<div class="bio-bar">
+    <div>
+        <span id="player-icon" style="font-size:30px">🦠</span>
+        <span id="player-name" style="font-size:18px; font-weight:bold;">טפיל</span>
     </div>
-
-    <!-- מסך הרשמה -->
-    <div id="login-screen" class="container">
-        <div class="card">
-            <h2>מוכן לאתגר היומי?</h2>
-            <p>לחץ על המספרים 1-25 לפי הסדר.</p>
-            <p style="color: #888">כל העולם מקבל את אותו לוח.</p>
-            <br>
-            <input id="username" placeholder="הכנס שם משתמש">
-            <button onclick="register()">התחל משחק</button>
-        </div>
+    <div style="font-size:12px; color:#aaa;">חדר <span id="pos">0,0</span></div>
+    <div>
+        <span id="hp-text">10/10</span>
+        <span id="heart-anim" class="bio-heart">❤</span>
     </div>
+</div>
 
-    <!-- לוח המשחק -->
-    <div id="game-screen" class="container" style="display:none">
-        <div class="card" id="start-msg">
-            <h3>המשימה: 1 עד 25</h3>
-            <p>הזמן יתחיל בלחיצה הראשונה על "1".</p>
-        </div>
-        <div class="grid" id="grid"></div>
+<div class="main-view">
+    <div class="scene-view" id="scene-container">
+        <!-- Enemies Render Here -->
+        <div style="color:#555">אין גופים בסביבה...</div>
     </div>
+    
+    <div class="log-view" id="log-container"></div>
+</div>
 
-    <!-- תוצאות ודירוג -->
-    <div id="leaderboard-screen" class="container" style="display:none">
-        <div class="card" id="result-card" style="display:none; border-color: #00e676;">
-            <h3>הזמן שלך היום</h3>
-            <div class="big-score" id="final-time-display"></div>
-            <div>ניסיון אחד. אין חרטות.</div>
-        </div>
-
-        <div class="card">
-            <h3>🏆 המובילים היום (<span id="today-date"></span>)</h3>
-            <div id="ranks-list"></div>
-        </div>
-        
-        <div style="text-align: center; color: #666; margin-top: 20px;">
-            האתגר הבא בעוד: <span id="countdown"></span>
-        </div>
-    </div>
+<div class="controls">
+    <button class="nav-btn" onclick="act('move', [0,1])" id="btn-u">⬆️</button>
+    <button class="nav-btn" onclick="act('move', [1,0])" id="btn-r">➡️</button>
+    <button class="nav-btn" onclick="act('move', [0,-1])" id="btn-d">⬇️</button>
+    <button class="nav-btn" onclick="act('move', [-1,0])" id="btn-l">⬅️</button>
+</div>
 
 <script>
-let currentNumber = 1;
-let startTime = null;
-let timerInterval;
-let gameActive = false;
-let myUser = null;
-
-// טעינה ראשונית
-fetch('/api/init').then(r=>r.json()).then(data => {
-    document.getElementById('today-date').innerText = data.date;
+    const API = "{{ api }}";
     
-    // בניה הלוח
-    const grid = document.getElementById('grid');
-    grid.innerHTML = '';
-    data.grid.forEach(num => {
-        let div = document.createElement('div');
-        div.className = 'cell';
-        div.innerText = num;
-        div.dataset.val = num;
-        div.onmousedown = (e) => cellClick(e, num, div); // שימוש ב-mousedown לתגובה מהירה יותר
-        div.ontouchstart = (e) => { e.preventDefault(); cellClick(e, num, div); }; // מניעת דיליי בטלפון
-        grid.appendChild(div);
-    });
+    window.onload = () => act('init');
 
-    renderLeaderboard(data.leaderboard);
-    startCountdown();
-
-    if (data.user) {
-        myUser = data.user;
-        document.getElementById('login-screen').style.display = 'none';
+    async function act(a, v=null) {
+        let res = await fetch(API, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({a:a, v:v})});
+        let d = await res.json();
         
-        if (data.user.played_today) {
-            // אם כבר שיחק, הראה ישר תוצאות
-            document.getElementById('leaderboard-screen').style.display = 'block';
+        if(d.game_over) { alert("לא היו גופות בחדר! מתת סופית."); act('reset'); return;}
+
+        // 1. Player Status Logic
+        let p = d.player;
+        document.getElementById("player-icon").innerText = p.icon;
+        document.getElementById("player-name").innerText = p.name;
+        document.getElementById("hp-text").innerText = p.hp + "/" + p.max;
+        document.getElementById("pos").innerText = d.pos;
+        
+        // Critical State: אם מתים - המסך אדום והכפתורים למטה ננעלים
+        let body = document.getElementById("bodybox");
+        let btns = document.querySelectorAll(".nav-btn");
+        let heart = document.getElementById("heart-anim");
+        
+        if (p.is_dead) {
+            body.classList.add("screen-danger");
+            heart.className = "bio-ghost"; // אייקון משתנה לרוח
+            heart.innerText = "👻";
+            btns.forEach(b => b.disabled = true); // אי אפשר ללכת
         } else {
-            // אם טרם שיחק, אפשר להתחיל
-            document.getElementById('game-screen').style.display = 'block';
+            body.classList.remove("screen-danger");
+            heart.className = "bio-heart";
+            heart.innerText = "❤";
+            btns.forEach(b => b.disabled = false);
         }
-    }
-});
 
-function register() {
-    let name = document.getElementById('username').value;
-    if(!name) return alert("חובה שם");
-    
-    fetch('/api/register', {
-        method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({name: name})
-    }).then(r=>r.json()).then(d => {
-        if(d.success) {
-            document.getElementById('login-screen').style.display = 'none';
-            document.getElementById('game-screen').style.display = 'block';
+        // 2. Render Enemies (Scene)
+        let sc = document.getElementById("scene-container");
+        sc.innerHTML = "";
+        
+        if(d.enemies.length === 0) {
+            sc.innerHTML = "<div style='color:#555'>החדר ריק... נוע לחדר הבא.</div>";
+        } else {
+            d.enemies.forEach((e, idx) => {
+                let card = document.createElement("div");
+                card.className = "enemy-card";
+                
+                // ההחלטה החשובה: אם השחקן מת - הכפתור הוא "הדבקה", אחרת "תקיפה"
+                let btnHtml = "";
+                if (p.is_dead) {
+                    btnHtml = `<button class='action-btn btn-infect' onclick='act("infect", ${idx})'>🧬 פלוש!</button>`;
+                } else {
+                    btnHtml = `<button class='action-btn btn-attack' onclick='act("attack", ${idx})'>⚔️ תקוף</button>`;
+                }
+                
+                card.innerHTML = `
+                    <div style='font-size:30px; margin-top:10px;'>${e.icon}</div>
+                    <div style='font-size:12px; font-weight:bold'>${e.name}</div>
+                    <div style='color:#f55; font-size:11px'>${e.hp}/${e.max_hp}</div>
+                    ${btnHtml}
+                `;
+                sc.appendChild(card);
+            });
         }
-    });
-}
 
-function cellClick(e, num, div) {
-    if (!myUser || myUser.played_today) return;
-    
-    // התחלת שעון בלחיצה על 1
-    if (num === 1 && !gameActive) {
-        gameActive = true;
-        startTime = performance.now();
-        timerInterval = requestAnimationFrame(updateTimer);
-        document.getElementById('start-msg').style.opacity = '0';
+        // 3. Log
+        let lb = document.getElementById("log-container");
+        lb.innerHTML = "";
+        d.log.reverse().forEach(l => {
+            lb.innerHTML += `<div class='msg ${l.type}'>${l.text}</div>`;
+        });
     }
-
-    if (!gameActive) return;
-
-    if (num === currentNumber) {
-        // לחיצה נכונה
-        div.classList.add('correct');
-        currentNumber++;
-        
-        if (currentNumber > 25) {
-            endGame();
-        }
-    } else {
-        // לחיצה שגויה (אופציונלי: להוסיף עונש זמן)
-        div.classList.add('wrong');
-        setTimeout(() => div.classList.remove('wrong'), 300);
-    }
-}
-
-function updateTimer() {
-    if(!gameActive) return;
-    let now = performance.now();
-    let diff = (now - startTime) / 1000;
-    document.getElementById('timer').innerText = diff.toFixed(3);
-    timerInterval = requestAnimationFrame(updateTimer);
-}
-
-function endGame() {
-    gameActive = false;
-    cancelAnimationFrame(timerInterval);
-    let finalTime = ((performance.now() - startTime) / 1000).toFixed(3);
-    
-    document.getElementById('game-screen').style.display = 'none';
-    document.getElementById('leaderboard-screen').style.display = 'block';
-    document.getElementById('result-card').style.display = 'block';
-    document.getElementById('final-time-display').innerText = finalTime + "s";
-
-    // שליחה לשרת
-    fetch('/api/submit', {
-        method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({time: parseFloat(finalTime)})
-    }).then(r=>r.json()).then(d=>{
-        if(d.error) alert(d.error);
-        else location.reload(); // רענון כדי לראות את עצמך בטבלה
-    });
-}
-
-function renderLeaderboard(list) {
-    let html = "";
-    if (list.length === 0) html = "<div style='padding:20px'>עדיין אין תוצאות היום. היה הראשון!</div>";
-    
-    list.forEach((entry, i) => {
-        let medal = "";
-        if(i===0) medal = "🥇";
-        if(i===1) medal = "🥈";
-        if(i===2) medal = "🥉";
-        
-        html += `
-        <div class="rank-row">
-            <div>${medal} ${i+1}. ${entry.name}</div>
-            <div>${entry.time.toFixed(3)}s</div>
-        </div>`;
-    });
-    document.getElementById('ranks-list').innerHTML = html;
-}
-
-function startCountdown() {
-    setInterval(() => {
-        let now = new Date();
-        let tomorrow = new Date(now);
-        tomorrow.setDate(now.getDate() + 1);
-        tomorrow.setHours(0,0,0,0);
-        
-        let diff = tomorrow - now;
-        let hours = Math.floor(diff / (1000 * 60 * 60));
-        let minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-        let seconds = Math.floor((diff % (1000 * 60)) / 1000);
-        
-        document.getElementById('countdown').innerText = 
-            `${hours}:${minutes.toString().padStart(2,'0')}:${seconds.toString().padStart(2,'0')}`;
-    }, 1000);
-}
-
 </script>
 </body>
 </html>
 """
 
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+if __name__ == "__main__":
+    app.run(port=5006, debug=True)
