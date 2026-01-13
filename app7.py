@@ -1,419 +1,448 @@
-import json
-import uuid
-import time
 import random
-from flask import Flask, request, render_template_string, redirect, jsonify, make_response
+import uuid
+from flask import Flask, render_template_string, request, jsonify, session, url_for
 
 app = Flask(__name__)
-app.secret_key = "factions_war_secret_key"
+app.secret_key = 'space_commander_pro_v1'
 
-DB_FILE = "factions_db.json"
+# ==========================================
+# 🛰️ הגדרות התחנה (DATABASE)
+# ==========================================
 
-# --- נתוני עולם בסיסיים ---
-ROLES = {
-    "fighter": {"name": "🗡️ לוחם", "hp": 120, "ap_regen": 2, "desc": "תוקף שחקנים וגונב כסף"},
-    "merchant": {"name": "💎 סוחר", "hp": 80, "ap_regen": 3, "desc": "מייצר כסף ומבצע עסקאות"},
-    "manager": {"name": "👔 מנהל", "hp": 100, "ap_regen": 1, "desc": "גובה מיסים ושולט בתקציב העיר"},
-    "spy": {"name": "🕵️ מרגל", "hp": 60, "ap_regen": 4, "desc": "בלתי נראה, גונב בשקט"}
+SECTORS = {
+    "N": {"name": "האנגר צפוני", "defense": 0, "max_def": 100},
+    "S": {"name": "כור דרומי",   "defense": 20, "max_def": 100},
+    "E": {"name": "מעבדות מזרח", "defense": 10, "max_def": 100},
+    "W": {"name": "מגורים מערב", "defense": 10, "max_def": 100},
+    "CORE": {"name": "ליבת הפיקוד", "defense": 1000, "max_def": 1000} # המטרה: להגן על זה
 }
 
-# --- ניהול דאטהבייס (JSON) ---
-def load_db():
-    if not os_path_exists(DB_FILE):
-        return {"players": {}, "city_bank": 500, "logs": []}
+ALIENS = [
+    {"name": "רחפן", "dmg": 5, "speed": 1},
+    {"name": "משחית", "dmg": 15, "speed": 2},
+    {"name": "אמא גדולה", "dmg": 40, "speed": 1}
+]
+
+# ==========================================
+# ⚙️ מנוע המשחק (Logic Engine)
+# ==========================================
+class Engine:
+    def __init__(self, state=None):
+        if not state:
+            self.state = {
+                "energy": 100, "max_energy": 100,
+                "oxygen": 100, "max_oxygen": 100,
+                "day": 1,
+                "sectors": SECTORS.copy(), # העתק של מצב החדרים
+                "enemies": [], # [ {"type":..., "loc": "N", "hp": 20} ]
+                "log": [{"text": "ברוך הבא, מפקד. המערכות יציבות... לבינתיים.", "type": "sys"}]
+            }
+        else:
+            self.state = state
+
+    def log(self, t, type="sys"): self.state["log"].append({"text": t, "type": type})
+
+    # --- יצירת גל אויבים ---
+    def spawn_wave(self):
+        # ככל שהימים עוברים, יותר אויבים
+        count = random.randint(1, self.state["day"] + 1)
+        for _ in range(count):
+            loc = random.choice(["N", "S", "E", "W"]) # מגיעים מהצדדים
+            base_alien = random.choice(ALIENS)
+            new_enemy = {
+                "name": base_alien["name"],
+                "dmg": base_alien["dmg"],
+                "hp": 20 + (self.state["day"] * 5),
+                "loc": loc
+            }
+            self.state["enemies"].append(new_enemy)
+            sector_name = self.state["sectors"][loc]["name"]
+            self.log(f"⚠️ זיהוי עוין: {new_enemy['name']} מתקרב מ{sector_name}!", "danger")
+
+    # --- תור המשחק (החלק המרכזי) ---
+    def next_turn(self):
+        s = self.state
+        s["energy"] = min(s["energy"] + 10, s["max_energy"]) # טעינה טבעית
+        s["oxygen"] -= 2 # צריכת חמצן
+        
+        if s["oxygen"] <= 0:
+            self.log("❌ החמצן אזל. הצוות נחנק.", "danger")
+            return "dead"
+
+        # 1. התקפת אויבים
+        alive_enemies = []
+        for e in s["enemies"]:
+            loc = e["loc"]
+            sec = s["sectors"][loc]
+            
+            # אם ההגנה בחדר ירדה ל-0, האויב מתקדם לליבה (CORE)
+            if sec["defense"] <= 0 and loc != "CORE":
+                self.log(f"🚨 {e['name']} פרץ את {sec['name']} ומתקדם לליבה!", "danger")
+                e["loc"] = "CORE"
+                sec["defense"] = 0 # מוודא שלא ירד מתחת לאפס
+            
+            # גרימת נזק למקום הנוכחי
+            target = s["sectors"][e["loc"]]
+            damage = e["dmg"]
+            target["defense"] -= damage
+            
+            # האם האויב מת מהגנות אוטומטיות? (נניח שיש לייזרים חלשים)
+            e["hp"] -= 5 
+            
+            if target["defense"] <= 0 and e["loc"] == "CORE":
+                return "dead" # הליבה הושמדה
+            
+            if e["hp"] > 0:
+                alive_enemies.append(e)
+            else:
+                self.log(f"🔫 {e['name']} חוסל ע'י מערכות ההגנה האוטומטיות.", "success")
+
+        s["enemies"] = alive_enemies
+        
+        # גלים חדשים כל תור רביעי בערך
+        if random.random() < 0.3 + (s["day"] * 0.05):
+            self.spawn_wave()
+
+        return "ok"
+
+    # --- פעולות המפקד ---
+    def action_fire(self, loc):
+        cost = 25
+        if self.state["energy"] >= cost:
+            self.state["energy"] -= cost
+            # פוגע בכל האויבים בסקטור הזה
+            hits = 0
+            survivors = []
+            for e in self.state["enemies"]:
+                if e["loc"] == loc:
+                    e["hp"] -= 50
+                    hits += 1
+                    if e["hp"] > 0: survivors.append(e)
+                    else: self.log(f"🎯 פיצוץ פלזמה השמיד את {e['name']} ב{loc}!", "success")
+                else:
+                    survivors.append(e)
+            
+            self.state["enemies"] = survivors
+            
+            room = self.state["sectors"][loc]["name"]
+            if hits == 0: self.log(f"ירית ל-{room} אך לא היה שם אף אחד. בזבוז אנרגיה.", "warning")
+        else:
+            self.log("⚠️ אנרגיה נמוכה! לא ניתן לירות.", "warning")
+
+    def action_repair(self, loc):
+        cost = 15
+        if self.state["energy"] >= cost:
+            self.state["energy"] -= cost
+            self.state["sectors"][loc]["defense"] = self.state["sectors"][loc]["max_def"]
+            room = self.state["sectors"][loc]["name"]
+            self.log(f"🔧 נשלחו רחפני תיקון ל{room}. ההגנה שוחזרה.", "info")
+        else:
+            self.log("⚠️ חסרה אנרגיה לתיקון.", "warning")
+
+    def action_ventilate(self):
+        cost = 30
+        if self.state["energy"] >= cost:
+            self.state["energy"] -= cost
+            self.state["oxygen"] = min(self.state["oxygen"] + 40, 100)
+            self.log("💨 מערכות האוורור הופעלו במלוא העוצמה.", "success")
+        else:
+            self.log("⚠️ אין מספיק חשמל להפעלת מסנני האוויר.", "warning")
+
+# ==========================================
+# שרת
+# ==========================================
+@app.route("/")
+def index():
+    if "uid" not in session: session["uid"] = str(uuid.uuid4())
+    api = url_for("update")
+    return render_template_string(HTML, api=api)
+
+@app.route("/api/update", methods=["POST"])
+def update():
     try:
-        with open(DB_FILE, 'r', encoding='utf-8') as f:
-            return json.load(f)
+        # Load engine
+        eng = Engine(session.get("game_cmd"))
     except:
-        return {"players": {}, "city_bank": 500, "logs": []}
+        eng = Engine(None) # auto reset
 
-def save_db(data):
-    with open(DB_FILE, 'w', encoding='utf-8') as f:
-        json.dump(data, f, ensure_ascii=False)
+    data = request.json or {}
+    act = data.get("action") # fire / repair / vent / wait
+    target = data.get("target") # N / S / E / W
 
-def os_path_exists(path):
-    import os
-    return os.path.exists(path)
-
-# פונקצית לוג משותף לכולם
-def add_log(db, text):
-    import datetime
-    time_str = datetime.datetime.now().strftime("%H:%M:%S")
-    db['logs'].insert(0, f"[{time_str}] {text}")
-    db['logs'] = db['logs'][:50] # שומר רק 50 שורות אחרונות
-
-# --- צד השרת: לוגיקה ---
-
-@app.route('/')
-def home():
-    uid = request.cookies.get('user_id')
-    db = load_db()
+    status = "ok"
     
-    # אם אין משתמש או שהמשתמש לא קיים במאגר - לך להרשמה
-    if not uid or uid not in db['players']:
-        return render_template_string(LOGIN_HTML)
-    
-    # טוען את דף המשחק
-    player = db['players'][uid]
-    return render_template_string(GAME_HTML, me=player, role_name=ROLES[player['role']]['name'])
+    if act == "reset":
+        eng = Engine(None)
+    elif act == "fire":
+        eng.action_fire(target)
+        status = eng.next_turn()
+    elif act == "repair":
+        eng.action_repair(target)
+        status = eng.next_turn()
+    elif act == "vent":
+        eng.action_ventilate()
+        status = eng.next_turn()
+    elif act == "wait":
+        eng.log("⏳ המתנת תור אחד...", "sys")
+        status = eng.next_turn()
 
-@app.route('/login', methods=['POST'])
-def login():
-    username = request.form.get('username')
-    role = request.form.get('role')
-    
-    if not username or role not in ROLES:
-        return "שגיאה בפרטים", 400
+    # בדיקת הפסד
+    if status == "dead" or eng.state["sectors"]["CORE"]["defense"] <= 0:
+        return jsonify({"dead": True, "day": eng.state["day"]})
 
-    db = load_db()
-    uid = str(uuid.uuid4())
+    session["game_cmd"] = eng.state
     
-    # יצירת שחקן חדש
-    db['players'][uid] = {
-        "id": uid,
-        "name": username,
-        "role": role,
-        "money": 100 if role != 'manager' else 1000, # למנהל יש תקציב התחלתי
-        "hp": ROLES[role]['hp'],
-        "max_hp": ROLES[role]['hp'],
-        "ap": 10, # Action Points
-        "max_ap": 10,
-        "last_seen": time.time()
+    return jsonify({
+        "stats": {
+            "energy": eng.state["energy"],
+            "oxy": eng.state["oxygen"],
+            "day": eng.state["day"]
+        },
+        "sectors": eng.state["sectors"],
+        "enemies_count": len(eng.state["enemies"]),
+        "log": eng.state["log"]
+    })
+
+# ==========================================
+# FRONTEND - COMMANDER INTERFACE
+# ==========================================
+HTML = """
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PROXIMA COMMAND</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
+<style>
+    :root {
+        --bg: #050a14;
+        --ui-dark: #0f192b;
+        --neon-blue: #00f3ff;
+        --neon-red: #ff2a2a;
+        --neon-green: #2aff5d;
+        --ui-border: 1px solid rgba(0, 243, 255, 0.3);
     }
     
-    add_log(db, f"✨ {username} הצטרף לעיר בתור {ROLES[role]['name']}.")
-    save_db(db)
+    body { background: var(--bg); color: var(--neon-blue); font-family: 'Orbitron', sans-serif; margin:0; height:100vh; overflow:hidden; display:flex; flex-direction:column;}
     
-    resp = make_response(redirect('/'))
-    resp.set_cookie('user_id', uid)
-    return resp
-
-# --- API לעדכון נתונים בזמן אמת (Polling) ---
-@app.route('/api/update')
-def api_update():
-    uid = request.cookies.get('user_id')
-    db = load_db()
+    /* === TOP BAR (Resource) === */
+    .top-deck {
+        display:grid; grid-template-columns: 1fr 1fr 1fr;
+        padding: 15px; border-bottom: 2px solid var(--neon-blue);
+        background: rgba(0,20,40,0.8);
+        box-shadow: 0 0 20px rgba(0, 243, 255, 0.2);
+    }
+    .meter { background: #000; border: 1px solid #333; height: 20px; position:relative; margin-top:5px; border-radius: 4px; overflow:hidden;}
+    .fill { height:100%; width:100%; transition: 0.3s; }
+    .label { font-size: 0.9rem; font-weight:bold; display:flex; justify-content:space-between;}
     
-    if not uid or uid not in db['players']: return jsonify({"reload": True})
+    /* === MAIN LAYOUT (RADAR) === */
+    .command-center {
+        flex: 1; position: relative;
+        display: flex; align-items: center; justify-content: center;
+        background-image: 
+            radial-gradient(circle, rgba(0, 243, 255, 0.05) 1px, transparent 1px),
+            linear-gradient(rgba(0, 243, 255, 0.03) 1px, transparent 1px);
+        background-size: 30px 30px, 100% 30px;
+    }
     
-    me = db['players'][uid]
+    /* בניית מפה בצורת פלוס */
+    .station-grid {
+        display: grid;
+        grid-template-areas: 
+            ". N ."
+            "W C E"
+            ". S .";
+        gap: 15px;
+        transform: scale(1.1);
+    }
     
-    # חידוש אנרגיה (AP) לפי זמן
-    current_time = time.time()
-    time_diff = current_time - me['last_seen']
+    .sector {
+        width: 120px; height: 100px;
+        background: rgba(0,0,0,0.8);
+        border: 2px solid #334;
+        display: flex; flex-direction: column; align-items: center; justify-content: space-between;
+        padding: 10px; cursor: pointer;
+        transition: 0.2s;
+        position: relative;
+    }
+    .sector:hover { border-color: var(--neon-blue); box-shadow: 0 0 15px var(--neon-blue); }
+    .sector.danger { border-color: var(--neon-red); animation: pulse 1s infinite; }
+    .sector-name { font-size: 0.8rem; color: #aaa; }
     
-    # אם עבר זמן - הוסף אנרגיה ועדכן "נראה לאחרונה"
-    if time_diff > 5: 
-        regen = ROLES[me['role']]['ap_regen']
-        if me['ap'] < me['max_ap']:
-            me['ap'] = min(me['max_ap'], me['ap'] + regen)
-        me['last_seen'] = current_time
-        save_db(db)
-
-    # סינון שחקנים לתצוגה
-    visible_players = []
-    for pid, p in db['players'].items():
-        # לא מראים את עצמנו ברשימה
-        if pid == uid: continue
-        # לא מראים שחקנים לא פעילים (מעל דקה)
-        if current_time - p['last_seen'] > 60: continue
-        
-        # לוגיקה למרגל: מרגלים לא מופיעים ברשימה לאחרים (רק למרגלים אחרים)
-        if p['role'] == 'spy' and me['role'] != 'spy': continue
-        
-        visible_players.append({
-            "id": p['id'],
-            "name": p['name'],
-            "role": p['role'],
-            "role_icon": ROLES[p['role']]['name'].split(' ')[0],
-            "hp": p['hp'],
-            "money": p['money'] if me['role'] == 'spy' else '???' # רק מרגל רואה כמה כסף יש לאחרים
-        })
-
-    return jsonify({
-        "me": me,
-        "city_bank": db['city_bank'],
-        "players": visible_players,
-        "logs": db['logs']
-    })
-
-# --- ביצוע פעולות ---
-@app.route('/api/action', methods=['POST'])
-def perform_action():
-    data = request.json
-    action = data.get('action')
-    target_id = data.get('target_id')
+    .hp-bar { width: 100%; height: 5px; background: #333; margin-top: 5px; }
+    .hp-val { width: 100%; height: 100%; background: var(--neon-green); transition:0.3s;}
     
-    uid = request.cookies.get('user_id')
-    db = load_db()
+    .btn-act { width:100%; padding:5px; margin-top:2px; font-size:0.7rem; cursor:pointer; border:none; color:white; font-weight:bold; font-family:inherit;}
+    .btn-fire { background: rgba(200, 50, 50, 0.7); }
+    .btn-repair { background: rgba(50, 150, 200, 0.7); }
+
+    /* CORE - במרכז */
+    .sec-c { grid-area: C; border-color: gold; box-shadow: 0 0 30px rgba(255,215,0,0.2); width:140px; height:120px;}
+    .sec-n { grid-area: N; }
+    .sec-s { grid-area: S; }
+    .sec-e { grid-area: E; }
+    .sec-w { grid-area: W; }
+
+    /* === BOTTOM (LOGS & GLOBAL) === */
+    .console {
+        height: 200px;
+        background: #020408;
+        border-top: 2px solid #333;
+        display: grid; grid-template-columns: 2fr 1fr;
+        font-family: 'Consolas', monospace;
+    }
+    .logs { padding: 15px; overflow-y: auto; font-size: 0.9rem; border-left: 1px solid #222; }
+    .log-line { margin-bottom: 5px; border-right: 3px solid transparent; padding-right:5px;}
+    .sys { color: #88c; }
+    .danger { color: #f55; border-color:#f55; background: rgba(50,0,0,0.3);}
+    .success { color: #5f5; border-color:#5f5;}
     
-    me = db['players'].get(uid)
-    target = db['players'].get(target_id)
+    .global-controls {
+        display: flex; flex-direction: column; gap: 10px; padding: 20px; align-items: center; justify-content: center;
+    }
+    .big-btn {
+        width: 100%; padding: 15px; font-size: 1rem; cursor: pointer;
+        background: transparent; color: var(--neon-blue); border: 2px solid var(--neon-blue);
+        text-transform: uppercase; font-family: inherit; font-weight: bold;
+        transition: 0.2s;
+    }
+    .big-btn:hover { background: var(--neon-blue); color: black; }
     
-    if not me: return jsonify({"error": "No user"})
-    if me['ap'] < 2: return jsonify({"msg": "❌ אין מספיק אנרגיה!"})
-    
-    msg = ""
-    
-    # 🗡️ לוחם: תקיפה
-    if action == 'attack' and me['role'] == 'fighter' and target:
-        damage = random.randint(10, 20)
-        stolen = int(target['money'] * 0.1) # גונב 10%
-        
-        target['hp'] -= damage
-        target['money'] -= stolen
-        me['money'] += stolen
-        me['ap'] -= 3
-        
-        msg = f"⚔️ תקפת את {target['name']}! גרמת {damage} נזק ולקחת {stolen}$."
-        add_log(db, f"🗡️ {me['name']} תקף את {target['name']} ושדד {stolen}$.")
+    @keyframes pulse { 50% { border-color: transparent; box-shadow:none;} }
 
-    # 💎 סוחר: מסחר (יצירת כסף)
-    elif action == 'trade' and me['role'] == 'merchant':
-        profit = random.randint(30, 60)
-        tax = int(profit * 0.2) # 20% מס לקופה הציבורית
-        
-        me['money'] += (profit - tax)
-        db['city_bank'] += tax
-        me['ap'] -= 3
-        
-        msg = f"💎 הרווחת {profit - tax}$. שילמת {tax}$ מס לעיר."
-        add_log(db, f"⚖️ {me['name']} סגר עסקה בשוק. הקופה הציבורית גדלה.")
-
-    # 👔 מנהל: גביית מיסים
-    elif action == 'tax' and me['role'] == 'manager' and target:
-        amount = int(target['money'] * 0.3)
-        target['money'] -= amount
-        db['city_bank'] += amount
-        me['ap'] -= 5
-        
-        msg = f"📜 החרמת {amount}$ מ-{target['name']} לטובת הציבור."
-        add_log(db, f"🏛️ המנהל {me['name']} גבה מס כפוי מ-{target['name']}.")
-
-    # 🕵️ מרגל: גניבה
-    elif action == 'steal' and me['role'] == 'spy' and target:
-        chance = random.random()
-        me['ap'] -= 4
-        if chance > 0.3: # הצלחה
-            amount = int(target['money'] * 0.4)
-            target['money'] -= amount
-            me['money'] += amount
-            msg = f"🕵️ הצלחה! גנבת {amount}$ מ-{target['name']} בלי שיבחינו."
-            # לא כותבים בלוג הציבורי מי עשה את זה!
-            add_log(db, f"❓ מישהו מסתורי גנב כסף מ-{target['name']}...")
-        else: # כישלון
-            damage = 15
-            me['hp'] -= damage
-            msg = "⚠️ נתפסת! שומרי הראש הרביצו לך."
-            add_log(db, f"🚨 {me['name']} נתפס מנסה לכייס את {target['name']}!")
-
-    # רפואה עצמית (לכולם)
-    elif action == 'heal':
-        if me['money'] >= 20:
-            me['money'] -= 20
-            me['hp'] = min(me['max_hp'], me['hp'] + 30)
-            me['ap'] -= 2
-            msg = "➕ קנית תרופה. החיים עלו."
-        else:
-            msg = "❌ אין מספיק כסף לתרופה."
-
-    save_db(db)
-    return jsonify({"msg": msg})
-
-# --- HTML (Frontend) ---
-
-LOGIN_HTML = """
-<!DOCTYPE html>
-<html lang="he" dir="rtl">
-<head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Factions - התחברות</title>
-<style>
-body { background: #111; color: white; font-family: sans-serif; text-align: center; padding: 20px; }
-input, select, button { padding: 15px; margin: 10px; width: 80%; border-radius: 8px; border: none; font-size: 18px; }
-button { background: #00d4ff; color: #000; font-weight: bold; cursor: pointer; }
-.card { background: #222; padding: 20px; border-radius: 15px; border: 1px solid #444; max-width: 400px; margin: 0 auto; }
-</style>
-</head>
-<body>
-<h1>FACTIONS WARS 🌍</h1>
-<div class="card">
-    <form action="/login" method="post">
-        <input type="text" name="username" placeholder="בחר כינוי" required>
-        <h3>בחר מעמד:</h3>
-        <select name="role">
-            <option value="fighter">🗡️ לוחם (קרבי)</option>
-            <option value="merchant">💎 סוחר (כלכלי)</option>
-            <option value="manager">👔 מנהל (פוליטי)</option>
-            <option value="spy">🕵️ מרגל (התגנבות)</option>
-        </select>
-        <button type="submit">היכנס לעולם</button>
-    </form>
-</div>
-</body>
-</html>
-"""
-
-GAME_HTML = """
-<!DOCTYPE html>
-<html lang="he" dir="rtl">
-<head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Factions Game</title>
-<style>
-body { margin:0; background: #0f0f13; color: #e0e0e0; font-family: 'Segoe UI', sans-serif; padding-bottom: 20px;}
-.header { background: #1f1f23; padding: 15px; position: sticky; top:0; z-index:100; border-bottom: 2px solid #00d4ff; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 5px 20px rgba(0,0,0,0.5); }
-.stats span { margin-left: 10px; font-weight: bold; }
-.ap { color: #ffd700; } .hp { color: #ff4d4d; } .money { color: #00ff7f; }
-
-.container { max-width: 600px; margin: 0 auto; padding: 10px; }
-
-/* לוג */
-.logs { background: #000; height: 120px; overflow-y: scroll; padding: 10px; border-radius: 8px; border: 1px solid #333; font-size: 13px; font-family: monospace; color: #888; margin-bottom: 20px; }
-.logs div { border-bottom: 1px solid #111; padding: 3px 0; }
-
-/* רשימת שחקנים */
-.player-card { 
-    background: #25252b; margin-bottom: 10px; padding: 15px; border-radius: 10px; 
-    display: flex; justify-content: space-between; align-items: center; border: 1px solid #333;
-}
-.player-info { display: flex; flex-direction: column; }
-.player-name { font-weight: bold; font-size: 16px; color: #fff; }
-.player-role { font-size: 12px; color: #aaa; }
-
-/* כפתורי פעולה */
-.actions { display: flex; gap: 5px; }
-button { border: none; padding: 8px 12px; border-radius: 5px; cursor: pointer; font-weight: bold; transition: 0.2s; }
-.btn-atk { background: #b71c1c; color: white; }
-.btn-tax { background: #1565c0; color: white; }
-.btn-steal { background: #4a148c; color: white; }
-.btn-self { background: #333; color: #aaa; border: 1px solid #555; width: 100%; margin-bottom: 15px; padding: 12px; }
-
-.toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #333; padding: 10px 20px; border-radius: 20px; border: 1px solid #00d4ff; display: none; z-index: 200; box-shadow: 0 0 15px rgba(0,212,255,0.4); }
-
-.bank-info { text-align: center; color: #888; font-size: 12px; margin-top: -15px; margin-bottom: 15px; }
 </style>
 </head>
 <body>
 
-<div class="header">
-    <div style="font-weight:900; font-size:18px;">{{ me.name }}</div>
-    <div class="stats">
-        <span class="hp">❤️ <span id="val-hp">{{ me.hp }}</span></span>
-        <span class="ap">⚡ <span id="val-ap">{{ me.ap }}</span></span>
-        <span class="money">💵 <span id="val-money">{{ me.money }}</span></span>
+<div class="top-deck">
+    <div>
+        <div class="label">⚡ ENERGY <span id="val-en">100%</span></div>
+        <div class="meter"><div class="fill" id="bar-en" style="background:var(--neon-blue)"></div></div>
+    </div>
+    <div style="text-align:center">
+        <h2 style="margin:0; text-shadow:0 0 10px white;">PROXIMA II</h2>
+        <div style="font-size:0.8rem; color:#aaa;">DAY <span id="val-day">1</span> | ALERT LVL: HIGH</div>
+    </div>
+    <div>
+        <div class="label">💨 OXYGEN <span id="val-oxy">100%</span></div>
+        <div class="meter"><div class="fill" id="bar-oxy" style="background:#0ff"></div></div>
     </div>
 </div>
 
-<div class="container">
-    <div style="text-align: center; color: #aaa; font-size: 14px; margin: 10px 0;">אתה משחק בתור: <b>{{ role_name }}</b></div>
-    
-    <!-- כפתורים מיוחדים לעצמך -->
-    {% if me.role == 'merchant' %}
-        <button class="btn-self" onclick="doAction('trade')" style="background: #1b5e20; color: #fff; border: 1px solid #66bb6a;">⚖️ בצע עסקת מסחר (הכנסה)</button>
-    {% endif %}
-    
-    <button class="btn-self" onclick="doAction('heal')">💊 קנה תרופה (20$)</button>
+<div class="command-center">
+    <div class="station-grid">
+        <!-- SECTOR NORTH -->
+        <div class="sector sec-n" id="sec-N">
+            <span class="sector-name">NORTH HANGAR</span>
+            <div class="hp-bar"><div class="hp-fill" id="hp-N"></div></div>
+            <button class="btn-act btn-fire" onclick="act('fire','N')">🔥 YALA (25⚡)</button>
+            <button class="btn-act btn-repair" onclick="act('repair','N')">🔧 FIX (15⚡)</button>
+        </div>
 
-    <div class="logs" id="log-box">loading logs...</div>
-    
-    <div class="bank-info">🏛️ קופת העיר: <span id="city-bank">0</span>$</div>
+        <!-- SECTOR WEST -->
+        <div class="sector sec-w" id="sec-W">
+            <span class="sector-name">WEST WING</span>
+            <div class="hp-bar"><div class="hp-fill" id="hp-W"></div></div>
+            <button class="btn-act btn-fire" onclick="act('fire','W')">🔥 FIRE</button>
+            <button class="btn-act btn-repair" onclick="act('repair','W')">🔧 FIX</button>
+        </div>
 
-    <div id="players-list">
-        <!-- השחקנים יטענו כאן ב-JS -->
+        <!-- CORE CENTER -->
+        <div class="sector sec-c">
+            <strong style="color:gold">CORE</strong>
+            <div style="font-size:30px">☢️</div>
+            <div class="hp-bar" style="height:10px;"><div class="hp-fill" id="hp-CORE" style="background:gold"></div></div>
+        </div>
+
+        <!-- SECTOR EAST -->
+        <div class="sector sec-e" id="sec-E">
+            <span class="sector-name">EAST LABS</span>
+            <div class="hp-bar"><div class="hp-fill" id="hp-E"></div></div>
+            <button class="btn-act btn-fire" onclick="act('fire','E')">🔥 FIRE</button>
+            <button class="btn-act btn-repair" onclick="act('repair','E')">🔧 FIX</button>
+        </div>
+
+        <!-- SECTOR SOUTH -->
+        <div class="sector sec-s" id="sec-S">
+            <span class="sector-name">SOUTH REACTOR</span>
+            <div class="hp-bar"><div class="hp-fill" id="hp-S"></div></div>
+            <button class="btn-act btn-fire" onclick="act('fire','S')">🔥 FIRE</button>
+            <button class="btn-act btn-repair" onclick="act('repair','S')">🔧 FIX</button>
+        </div>
     </div>
 </div>
 
-<div id="toast" class="toast">הודעה</div>
+<div class="console">
+    <div class="logs" id="log-box">
+        <div class="log-line sys">INITIALIZING DEFENSE SYSTEMS... ONLINE.</div>
+    </div>
+    <div class="global-controls">
+        <button class="big-btn" onclick="act('wait')" style="border-color:#aaa; color:#aaa;">⌛ WAIT TURN (+10⚡)</button>
+        <button class="big-btn" onclick="act('vent')" style="border-color:#0f0; color:#0f0;">💨 VENTILATE (-30⚡)</button>
+        <button class="big-btn" onclick="act('reset')" style="font-size:0.8rem; border:none; color:red">ABORT / RESET</button>
+    </div>
+</div>
 
 <script>
-let myRole = "{{ me.role }}";
+    const API = "{{ api }}";
 
-function update() {
-    fetch('/api/update')
-    .then(r => r.json())
-    .then(data => {
-        if(data.reload) window.location.reload();
-        
-        // עדכון סטטים שלי
-        document.getElementById('val-hp').innerText = data.me.hp;
-        document.getElementById('val-ap').innerText = data.me.ap;
-        document.getElementById('val-money').innerText = data.me.money;
-        document.getElementById('city-bank').innerText = data.city_bank;
-
-        // עדכון לוג
-        let logsHtml = "";
-        data.logs.forEach(l => logsHtml += `<div>${l}</div>`);
-        document.getElementById('log-box').innerHTML = logsHtml;
-
-        // בניית רשימת שחקנים
-        let playersHtml = "";
-        data.players.forEach(p => {
-            let actions = "";
-            
-            // כפתורים לפי התפקיד שלי
-            if (myRole === 'fighter') {
-                actions = `<button class="btn-atk" onclick="doAction('attack', '${p.id}')">תקוף</button>`;
-            } else if (myRole === 'manager') {
-                actions = `<button class="btn-tax" onclick="doAction('tax', '${p.id}')">החרם כסף</button>`;
-            } else if (myRole === 'spy') {
-                actions = `<button class="btn-steal" onclick="doAction('steal', '${p.id}')">גנוב</button>`;
-            } else if (myRole === 'merchant') {
-                actions = `<span style='font-size:12px; color:gray'>לקוח פוטנציאלי</span>`;
-            }
-
-            // תצוגת כסף (רק מרגל רואה)
-            let moneyDisplay = myRole === 'spy' ? `<div style="color:gold; font-size:11px">💰 ${p.money}</div>` : '';
-
-            playersHtml += `
-            <div class="player-card">
-                <div class="player-info">
-                    <div class="player-name">${p.role_icon} ${p.name}</div>
-                    <div class="player-role">❤️ ${p.hp} | ${p.role}</div>
-                    ${moneyDisplay}
-                </div>
-                <div class="actions">${actions}</div>
-            </div>`;
+    async function act(action, target=null) {
+        let res = await fetch(API, {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({action:action, target:target})
         });
-        
-        if (data.players.length === 0) {
-            playersHtml = "<div style='text-align:center; padding:20px; color:#555'>אין שחקנים אחרים כרגע... חכה שיצטרפו</div>";
+        let d = await res.json();
+
+        if (d.dead) {
+            alert("GAME OVER! התחנה הושמדה ביום " + d.day);
+            act("reset");
+            return;
         }
-        
-        document.getElementById('players-list').innerHTML = playersHtml;
-    });
-}
 
-function doAction(act, targetId = null) {
-    fetch('/api/action', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ action: act, target_id: targetId })
-    })
-    .then(r => r.json())
-    .then(res => {
-        if(res.error) alert(res.error);
-        if(res.msg) showToast(res.msg);
-        update(); // רענון מידי
-    });
-}
+        // 1. Resources
+        updateBar("en", d.stats.energy);
+        updateBar("oxy", d.stats.oxy);
+        document.getElementById("val-day").innerText = d.stats.day;
 
-function showToast(msg) {
-    let t = document.getElementById('toast');
-    t.innerText = msg;
-    t.style.display = 'block';
-    setTimeout(() => { t.style.display = 'none'; }, 3000);
-}
+        // 2. Sectors status
+        for (const [key, sec] of Object.entries(d.sectors)) {
+            let hpPct = (sec.defense / sec.max_def) * 100;
+            let elBar = document.getElementById("hp-"+key);
+            if(elBar) elBar.style.width = hpPct + "%";
+            
+            // שינוי צבע לפי נזק
+            if(hpPct < 30) elBar.style.backgroundColor = "red";
+            else elBar.style.backgroundColor = (key=="CORE") ? "gold" : "#2aff5d";
+            
+            // אפקט אדום לחדר כולו אם הוא מותקף או הרוס
+            if(document.getElementById("sec-"+key)) {
+                if (hpPct < 100) document.getElementById("sec-"+key).style.borderColor = "orange";
+                if (hpPct < 50) document.getElementById("sec-"+key).classList.add("danger");
+                else document.getElementById("sec-"+key).classList.remove("danger");
+            }
+        }
 
-// עדכון כל 2 שניות
-setInterval(update, 2000);
-update();
+        // 3. Logs
+        let l = document.getElementById("log-box");
+        l.innerHTML = "";
+        d.log.reverse().forEach(ln => { // הכי חדש למעלה
+            l.innerHTML += `<div class='log-line ${ln.type}'>${ln.text}</div>`;
+        });
+    }
+
+    function updateBar(id, val) {
+        document.getElementById("bar-"+id).style.width = val + "%";
+        document.getElementById("val-"+id).innerText = val + "%";
+        // שינוי צבע בקריסה
+        if(val < 20) document.getElementById("bar-"+id).style.backgroundColor = "red";
+        else if (id=="en") document.getElementById("bar-"+id).style.backgroundColor = "var(--neon-blue)";
+        else document.getElementById("bar-"+id).style.backgroundColor = "#0ff";
+    }
 </script>
-
 </body>
 </html>
 """
 
-if __name__ == '__main__':
-    # מריץ את השרת על פורט 5000, נגיש מכל הרשת המקומית
-    app.run(host='0.0.0.0', port=5000, debug=True)
+if __name__ == "__main__":
+    app.run(port=5006, debug=True)
