@@ -172,9 +172,9 @@ MENU_HTML = """
             <div class="tag">מסע בחלל</div>
         </a>
         <a href="/game5/" class="card">
-            <span class="emoji-icon">🏙️</span>
-            <h2>Underworld</h2>
-            <div class="tag">פשע ומסתורין</div>
+            <span class="emoji-icon">⚔️</span>
+            <h2>IRON LEGION</h2>
+            <div class="tag">מלחמות</div>
         </a>
         <a href="/game6/" class="card">
             <span class="emoji-icon">🗝️</span>
