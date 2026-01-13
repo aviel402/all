@@ -1,107 +1,68 @@
-from flask import Flask, render_template_string, request, jsonify
-import random
+from flask import Flask, render_template_string
 
 app = Flask(__name__)
-
-state = {
-    "day": 1,
-    "food": 50,
-    "water": 50,
-    "power": 50,
-    "morale": 50,
-    "alive": True,
-    "log": ["המקלט נפתח. האחריות עליך."]
-}
 
 HTML = """
 <!DOCTYPE html>
 <html lang="he" dir="rtl">
 <head>
 <meta charset="UTF-8">
-<title>Shelter Command</title>
+<title>Overload Reaction</title>
 <style>
-body {
-    background:#111;
-    color:#eee;
-    font-family:Arial;
-    display:flex;
-    justify-content:center;
-}
-.panel {
-    width:400px;
-    background:#1b1b1b;
-    padding:20px;
-    margin-top:30px;
-    border-radius:10px;
-}
-.stat { margin:6px 0; }
-button {
-    width:100%;
-    margin-top:8px;
-    padding:10px;
-    background:#333;
-    color:white;
-    border:none;
-    cursor:pointer;
-}
-button:hover { background:#555; }
-.log {
-    background:#000;
-    margin-top:10px;
-    padding:10px;
-    height:120px;
-    overflow:auto;
-    font-size:13px;
-}
-.dead { color:red; font-size:22px; text-align:center; }
+body{background:#0c0c0c;color:#eee;font-family:Arial;text-align:center;margin:0;padding:0;height:100vh;display:flex;flex-direction:column;justify-content:center;align-items:center;}
+#btn{width:200px;padding:25px;font-size:24px;border:none;border-radius:12px;background:#444;color:white;cursor:pointer;transition:0.2s;}
+#btn.green{background:#00c853;}
+#btn.red{background:#d50000;}
+#stats{margin-top:15px;font-size:18px;}
+#log{margin-top:15px;height:120px;width:300px;background:#111;overflow:auto;padding:10px;font-size:13px;text-align:right;}
 </style>
 </head>
 <body>
 
-<div class="panel">
-<h2>🏠 Shelter Command</h2>
-
-<div id="stats"></div>
-
-<button onclick="act('food')">הקצה צוות לאיסוף מזון</button>
-<button onclick="act('water')">טפל במערכת המים</button>
-<button onclick="act('power')">תחזק גנרטור</button>
-<button onclick="act('morale')">דבר עם האנשים</button>
-
-<div class="log" id="log"></div>
-</div>
+<h1>⚡ Overload Reaction ⚡</h1>
+<button id="btn">חכה...</button>
+<div id="stats">HP: <span id="hp">100</span> | Score: <span id="score">0</span></div>
+<div id="log"></div>
 
 <script>
-function update(data){
-    if(!data.alive){
-        document.body.innerHTML = "<div class='dead'>המקלט קרס<br>שרדת " + data.day + " ימים</div>";
-        return;
+let hp = 100;
+let score = 0;
+let ready = false;
+let timer;
+
+function log(msg){const l=document.getElementById("log");l.innerHTML="• "+msg+"<br>"+l.innerHTML;}
+
+function startRound(){
+    ready=false;
+    const btn=document.getElementById("btn");
+    btn.className="";
+    btn.innerText="חכה...";
+    let delay=Math.random()*1500+500;
+    timer=setTimeout(()=>{
+        ready=true;
+        btn.className="green";
+        btn.innerText="לחץ עכשיו!";
+    },delay);
+}
+
+document.getElementById("btn").onclick=function(){
+    if(!ready){
+        hp-=10;
+        log("לחצת מוקדם! -10 HP");
+    } else {
+        score++;
+        log("לחצת בזמן! +1 Score");
+        startRound();
     }
-
-    document.getElementById("stats").innerHTML =
-        "יום: " + data.day + "<br>" +
-        "🍞 מזון: " + data.food + "<br>" +
-        "💧 מים: " + data.water + "<br>" +
-        "⚡ חשמל: " + data.power + "<br>" +
-        "🙂 מורל: " + data.morale;
-
-    document.getElementById("log").innerHTML =
-        data.log.map(x => "• " + x).join("<br>");
+    if(hp<=0){
+        document.body.innerHTML="<h1 style='color:red'>Game Over! Score: "+score+"</h1>";
+    }
+    document.getElementById("hp").innerText=hp;
+    document.getElementById("score").innerText=score;
 }
 
-function act(type){
-    fetch("/act", {
-        method:"POST",
-        headers:{ "Content-Type":"application/json" },
-        body:JSON.stringify({action:type})
-    })
-    .then(r=>r.json())
-    .then(update);
-}
-
-fetch("/state").then(r=>r.json()).then(update);
+startRound();
 </script>
-
 </body>
 </html>
 """
@@ -109,40 +70,6 @@ fetch("/state").then(r=>r.json()).then(update);
 @app.route("/")
 def game():
     return render_template_string(HTML)
-
-@app.route("/state")
-def get_state():
-    return jsonify(state)
-
-@app.route("/act", methods=["POST"])
-def act():
-    if not state["alive"]:
-        return jsonify(state)
-
-    a = request.json["action"]
-    state["day"] += 1
-
-    for k in ["food","water","power","morale"]:
-        state[k] -= random.randint(3,6)
-
-    if a == "food":
-        state["food"] += random.randint(10,15)
-        state["log"].append("נשלח צוות – חזר עם מזון.")
-    elif a == "water":
-        state["water"] += random.randint(10,15)
-        state["log"].append("המערכת תוקנה זמנית.")
-    elif a == "power":
-        state["power"] += random.randint(10,15)
-        state["log"].append("הגנרטור חזר לפעול.")
-    elif a == "morale":
-        state["morale"] += random.randint(10,15)
-        state["log"].append("שיחה קשה, אבל הרגיעה.")
-
-    if min(state["food"],state["water"],state["power"],state["morale"]) <= 0:
-        state["alive"] = False
-        state["log"].append("המערכת קרסה.")
-
-    return jsonify(state)
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
