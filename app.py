@@ -30,6 +30,8 @@ except ImportError: game6 = create_dummy_app("משחק 6 - ההרפתקה (לא 
 try: from app7 import app as game7
 except ImportError: game7 = create_dummy_app("משחק 7")
 
+try: from app8 import app as game8
+except ImportError: game8 = create_dummy_app("משחק 8")
 
 
 # --- הלאוצ'ר הראשי ---
@@ -200,6 +202,12 @@ MENU_HTML = """
             <h2>PROXIMA COMMAND</h2>
             <div class="tag">לחץ, קבלת החלטות וניהול משאבים</div>
         </a>
+        
+        <a href="/game8/" class="card">
+            <span class="emoji-icon">🦠</span>
+            <h2>הטפיל</h2>
+            <div class="tag">תודעה טפילית</div>
+        </a>
     </div>
 
     <footer>
@@ -220,7 +228,10 @@ app = DispatcherMiddleware(main_app, {
     '/game3': game3,
     '/game4': game4,
     '/game5': game5,
-    '/game6': game6  # משחק מבוך הצללים שלנו
+    '/game6': game6,
+    '/game7': game7,
+    '/game8': game8
+
 })
 
 if __name__ == "__main__":
