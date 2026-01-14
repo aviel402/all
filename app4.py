@@ -4,25 +4,25 @@ import time
 from flask import Flask, render_template_string, request, jsonify, session, url_for
 
 app = Flask(__name__)
-app.secret_key = 'hacker_elite_v1'
+app.secret_key = 'hebrew_hacker_final_v1'
 
 # ==========================================
-# 💾 מאגר נתונים (תוכנות וחומרה)
+# 💾 מאגר נתונים (עברית מלאה)
 # ==========================================
 PROGRAMS = {
-    "brute_force": {"name": "Brute Force v1", "cost_ram": 2, "dmg": 10, "risk": 5, "desc": "התקפה רועשת ומהירה."},
-    "sql_inject": {"name": "SQL Injection", "cost_ram": 4, "dmg": 25, "risk": 10, "desc": "חדירה למסד נתונים."},
-    "rootkit": {"name": "Rootkit Zero", "cost_ram": 8, "dmg": 60, "risk": 20, "desc": "השתלטות מוחלטת."},
-    "log_wiper": {"name": "Log Wiper", "cost_ram": 5, "effect": "reduce_trace", "val": 20, "desc": "מוחק עקבות. מוריד Trace."},
-    "proxy_hop": {"name": "Proxy Hop", "cost_ram": 3, "effect": "reduce_trace", "val": 10, "desc": "מסתיר את ה-IP."}
+    "brute_force": {"name": "כוח גס (BruteForce)", "cost_ram": 2, "dmg": 10, "risk": 5, "desc": "התקפה רועשת ומהירה."},
+    "sql_inject": {"name": "הזרקת קוד (SQL)", "cost_ram": 4, "dmg": 25, "risk": 10, "desc": "חדירה למסדי נתונים."},
+    "rootkit": {"name": "השתלטות (Rootkit)", "cost_ram": 8, "dmg": 60, "risk": 20, "desc": "מחיקת שרת מוחלטת."},
+    "log_wiper": {"name": "מחק עקבות", "cost_ram": 5, "effect": "reduce_trace", "val": 20, "desc": "מנקה לוגים (מוריד מעקב)."},
+    "proxy_hop": {"name": "פרוקסי (IP Hop)", "cost_ram": 3, "effect": "reduce_trace", "val": 10, "desc": "מסתיר את המיקום שלך."}
 }
 
 TARGETS_DB = [
-    {"name": "Local Pizza Shop", "def": 20, "reward": 50, "sec_level": 1},
-    {"name": "City Library", "def": 50, "reward": 120, "sec_level": 1},
-    {"name": "Bank of America", "def": 200, "reward": 800, "sec_level": 2},
-    {"name": "Gov. Secure DB", "def": 500, "reward": 2000, "sec_level": 3},
-    {"name": "NSA Black Server", "def": 1500, "reward": 10000, "sec_level": 4}
+    {"name": "פיצרייה שכונתית", "def": 20, "reward": 50, "sec_level": 1},
+    {"name": "שרת העירייה", "def": 50, "reward": 120, "sec_level": 1},
+    {"name": "בנק לאומי - כספת", "def": 200, "reward": 800, "sec_level": 2},
+    {"name": "מאגר נתונים משטרתי", "def": 500, "reward": 2000, "sec_level": 3},
+    {"name": "המוסד (שרת סודי)", "def": 1500, "reward": 10000, "sec_level": 4}
 ]
 
 # ==========================================
@@ -34,106 +34,95 @@ class Engine:
             self.state = {
                 # משאבים
                 "bitcoin": 0,
-                "ram": 10,       # משמש כ"אנרגיה" לתורות
+                "ram": 10,       
                 "max_ram": 10,
-                "cpu_lvl": 1,    # מכפיל נזק
+                "cpu_lvl": 1,    
                 
-                # סטטוס נוכחי
+                # סטטוס
                 "trace": 0,      # מד מעקב משטרתי (0-100)
-                "connected_to": None, # האם אני מחובר לשרת כרגע?
+                "connected_to": None,
                 
                 # עולם
-                "targets": [],   # רשימת מטרות פעילות
-                "log": [{"text": "M.A.T.R.I.X OS v9.2 Loaded...", "type": "sys"}]
+                "targets": [],   
+                "log": [{"text": "מערכת RedCode v9.0 אותחלה...", "type": "sys"}]
             }
             self.refresh_targets()
         else:
             self.state = state
 
     def log(self, txt, type="info"): 
-        # מוסיף שעה למראה מקצועי
         import datetime
         ts = datetime.datetime.now().strftime("%H:%M:%S")
-        self.state["log"].insert(0, {"text": f"[{ts}] {txt}", "type": type}) # חדש למעלה
+        self.state["log"].insert(0, {"text": f"[{ts}] {txt}", "type": type})
         if len(self.state["log"]) > 20: self.state["log"].pop()
 
     def refresh_targets(self):
-        # מגריל 3 מטרות רנדומליות
         self.state["targets"] = []
         for _ in range(3):
             t = random.choice(TARGETS_DB).copy()
-            # קצת גיוון במספרים
             t["max_def"] = int(t["def"] * random.uniform(0.8, 1.2))
             t["def"] = t["max_def"]
             t["id"] = str(uuid.uuid4())[:8]
             self.state["targets"].append(t)
 
-    # --- פעולות ---
-
     def connect(self, target_id):
         if self.state["connected_to"]:
-            self.log("שגיאה: כבר מחובר לשרת. התנתק קודם.", "error")
+            self.log("שגיאה: אתה כבר מחובר. התנתק קודם.", "error")
             return
 
         target = next((t for t in self.state["targets"] if t["id"] == target_id), None)
         if target:
             self.state["connected_to"] = target
-            self.log(f"CONNECTING TO {target['name']} [IP: 192.168.X.X]...", "sys")
-            self.log("החיבור בוצע. חומת האש פעילה.", "success")
+            self.log(f"מתחבר אל: {target['name']}...", "sys")
+            self.log("החיבור הצליח. חומת אש זוהתה.", "success")
         
     def disconnect(self):
         if not self.state["connected_to"]: return
         
-        self.log(f"DISCONNECTING from {self.state['connected_to']['name']}...", "sys")
+        self.log(f"מנתק חיבור משרת: {self.state['connected_to']['name']}...", "sys")
         self.state["connected_to"] = None
-        self.state["ram"] = self.state["max_ram"] # זיכרון מתנקה בהתנתקות
-        self.log("מערכת ב-Idle. זיכרון RAM שוחרר.", "info")
+        self.state["ram"] = self.state["max_ram"] 
+        self.log("מערכת במצב המתנה. זיכרון RAM נוקה.", "info")
 
     def run_program(self, prog_key):
         if not self.state["connected_to"]:
-            # אם מנסים להריץ תוכנות הגנה בלי להיות מחוברים (מנקים Trace מהבית)
             if prog_key in ["log_wiper", "proxy_hop"]:
                 self.run_defense(prog_key)
                 return
             else:
-                self.log("שגיאה: אין יעד. התחבר לשרת קודם.", "error")
+                self.log("שגיאה: אין חיבור לשרת.", "error")
                 return
 
         prog = PROGRAMS[prog_key]
         target = self.state["connected_to"]
 
-        # בדיקת RAM
         if self.state["ram"] < prog["cost_ram"]:
-            self.log("⚠️ זיכרון RAM לא מספיק להרצת התוכנה!", "error")
+            self.log("⚠️ שגיאת זיכרון: חסר RAM!", "error")
             return
 
         self.state["ram"] -= prog["cost_ram"]
 
-        # 1. תוכנות התקפה
         if "dmg" in prog:
             damage = prog["dmg"] * self.state["cpu_lvl"]
             target["def"] -= damage
             self.state["trace"] += prog["risk"]
             
-            self.log(f"Running {prog['name']} >> Uploading payload... Hit: {damage}", "hack")
+            self.log(f"מריץ {prog['name']} >> נזק לשרת: {damage}", "hack")
             
             if target["def"] <= 0:
                 self.hack_success(target)
 
-        # 2. תוכנות הגנה (תוך כדי פריצה)
         elif "effect" in prog:
             if prog["effect"] == "reduce_trace":
                 self.state["trace"] = max(0, self.state["trace"] - prog["val"])
-                self.log(f"Trace scrubbed. Current Level: {self.state['trace']}%", "success")
+                self.log(f"טשטוש עקבות בוצע. רמת סיכון: {self.state['trace']}%", "success")
 
-        # בדיקת כשלון (משטרה)
         if self.state["trace"] >= 100:
             return "game_over"
 
         return "ok"
 
     def run_defense(self, prog_key):
-        # הרצת כלים בבית
         prog = PROGRAMS[prog_key]
         if self.state["ram"] < prog["cost_ram"]:
             self.log("אין מספיק RAM.", "error")
@@ -142,24 +131,21 @@ class Engine:
         self.state["ram"] -= prog["cost_ram"]
         if prog["effect"] == "reduce_trace":
             self.state["trace"] = max(0, self.state["trace"] - prog["val"])
-            self.log(f"Logs Cleaned. Trace: {self.state['trace']}%", "success")
+            self.log(f"המחשב נוקה. רמת סיכון: {self.state['trace']}%", "success")
 
     def hack_success(self, target):
         loot = target["reward"]
         self.state["bitcoin"] += loot
-        self.log(f"ACCESS GRANTED! Root privileges obtained.", "gold")
-        self.log(f"העברת {loot} BTC לחשבון מוצפן.", "gold")
+        self.log(f"גישה מלאה אושרה! הסיסמאות בידינו.", "gold")
+        self.log(f"💰 {loot} ביטקוין הועברו לארנק.", "gold")
         
-        # מסירים את המטרה ומנתקים
         self.state["targets"].remove(target)
         self.state["connected_to"] = None
         self.state["ram"] = self.state["max_ram"]
         
-        # רענון מטרות אם נגמר
         if not self.state["targets"]:
             self.refresh_targets()
 
-    # --- חנות שדרוגים ---
     def upgrade(self, type):
         cost = 0
         if type == "ram":
@@ -168,30 +154,31 @@ class Engine:
                 self.state["bitcoin"] -= cost
                 self.state["max_ram"] += 5
                 self.state["ram"] = self.state["max_ram"]
-                self.log(f"UPGRADE: RAM הוגדל ל-{self.state['max_ram']}GB", "sys")
+                self.log(f"שדרוג בוצע: זיכרון גדל ל-{self.state['max_ram']}GB", "sys")
             else:
-                self.log("העברה נדחתה. אין מספיק כסף.", "error")
+                self.log("אין מספיק כסף בחשבון.", "error")
 
         elif type == "cpu":
             cost = self.state["cpu_lvl"] * 500
             if self.state["bitcoin"] >= cost:
                 self.state["bitcoin"] -= cost
                 self.state["cpu_lvl"] += 1
-                self.log(f"UPGRADE: מעבד שודרג לרמה {self.state['cpu_lvl']}", "sys")
+                self.log(f"שדרוג בוצע: מעבד רמה {self.state['cpu_lvl']}", "sys")
             else:
-                self.log("אין מספיק כסף למעבד חדש.", "error")
+                self.log("אין מספיק כסף בחשבון.", "error")
 
 # ==========================================
-# SERVER
+# WEB
 # ==========================================
 @app.route("/")
 def index():
     if "uid" not in session: session["uid"] = str(uuid.uuid4())
-    return render_template_string(HTML, api=url_for("action"))
+    api = url_for("action")
+    return render_template_string(HTML, api=api)
 
 @app.route("/action", methods=["POST"])
 def action():
-    try: eng = Engine(session.get("hacker_save"))
+    try: eng = Engine(session.get("hacker_il"))
     except: eng = Engine(None)
     
     d = request.json
@@ -199,7 +186,6 @@ def action():
     val = d.get("val")
     
     status = "ok"
-    
     if act == "connect": eng.connect(val)
     elif act == "disconnect": eng.disconnect()
     elif act == "run": status = eng.run_program(val)
@@ -209,7 +195,7 @@ def action():
     if status == "game_over":
         return jsonify({"game_over": True})
 
-    session["hacker_save"] = eng.state
+    session["hacker_il"] = eng.state
     
     return jsonify({
         "log": eng.state["log"],
@@ -218,215 +204,198 @@ def action():
     })
 
 # ==========================================
-# UI - THE MATRIX STYLE
+# ממשק משתמש - האקר ישראלי
 # ==========================================
 HTML = """
 <!DOCTYPE html>
-<html lang="en">
+<html lang="he" dir="rtl">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>CYBER-HEIST</title>
-<link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+<title>קוד אדום</title>
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;700&family=Courier+Prime&display=swap" rel="stylesheet">
 <style>
-    :root { --green: #0f0; --dim-green: #004400; --bg: #000; --red: #f00; --yellow: #ff0;}
-    body { background: var(--bg); color: var(--green); font-family: 'VT323', monospace; margin: 0; height: 100vh; display: flex; overflow: hidden; font-size: 20px;}
+    :root { --green: #0f0; --dim-green: #003300; --bg: #050505; --red: #ff3333; --gold: #ffd700;}
+    body { background: var(--bg); color: var(--green); font-family: 'Courier Prime', monospace; margin: 0; height: 100vh; display: flex; overflow: hidden; font-size: 18px;}
     
-    /* Layout */
-    .left-panel { width: 300px; border-right: 1px solid var(--dim-green); display: flex; flex-direction: column; padding: 10px; }
-    .main-panel { flex: 1; display: flex; flex-direction: column; padding: 20px; position: relative;}
+    /* Layout: Sidebar Right (Hebrew), Main Left */
+    .sidebar { width: 280px; border-left: 1px solid var(--dim-green); display: flex; flex-direction: column; padding: 15px; background: #0a0a0a; }
+    .main-view { flex: 1; display: flex; flex-direction: column; padding: 20px; position: relative;}
     
-    /* Bars */
-    .bar-box { margin-bottom: 15px; }
-    .label { display: flex; justify-content: space-between; margin-bottom: 2px;}
-    .progress-bg { width: 100%; height: 20px; background: #111; border: 1px solid var(--dim-green); }
-    .progress-fill { height: 100%; width: 0%; transition: 0.3s; background: var(--green); }
-    .trace-fill { background: var(--red); }
+    h1 { margin:0 0 20px 0; text-align:center; font-family: 'Heebo', sans-serif; letter-spacing: 2px; text-shadow: 0 0 10px var(--green);}
+
+    /* Stats Bars */
+    .stat-box { margin-bottom: 20px; }
+    .stat-label { display: flex; justify-content: space-between; font-size: 14px; margin-bottom: 5px; color:#aaa;}
+    .bar-bg { width: 100%; height: 15px; background: #222; border: 1px solid #444; }
+    .bar-fill { height: 100%; width: 0%; transition: 0.3s; background: var(--green); }
+    .trace-bar { background: var(--red); }
     
-    /* Target List */
-    .server-list { flex: 1; overflow-y: auto; }
+    /* Money & Info */
+    .wallet { border-top: 1px solid #333; padding-top: 15px; margin-top: auto; }
+    .coin-val { color: var(--gold); font-size: 28px; font-weight: bold;}
+    
+    /* Lists & Terminals */
+    .server-list { flex: 1; overflow-y: auto; display:flex; flex-direction:column; gap:10px; }
     .server-card { 
-        border: 1px dashed var(--dim-green); padding: 10px; margin-bottom: 10px; cursor: pointer; transition: 0.1s;
-        display: flex; justify-content: space-between; align-items: center;
+        background: #0d0d0d; border: 1px solid #333; padding: 10px; cursor: pointer; transition: 0.2s;
+        display: flex; justify-content: space-between; align-items: center; border-radius:4px;
     }
-    .server-card:hover { background: #001100; border-color: var(--green); }
-    .server-name { font-weight: bold; font-size: 1.1em;}
-    .locked { color: var(--red); } .open { color: var(--green); }
+    .server-card:hover { border-color: var(--green); background: #111; }
+    .svr-info { font-size: 14px; color: #777; }
+    
+    .terminal { flex: 1; border: 1px solid #333; padding: 15px; background: #000; overflow-y: auto; display: flex; flex-direction: column; margin-bottom: 20px; font-family:'Courier New', Courier, monospace;}
+    .line { margin-bottom: 4px; border-bottom: 1px solid #111; padding-bottom: 2px;}
+    .sys { color: #5f5; } .error { color: #f55; } .hack { color: #ff5; } .gold { color: gold; }
 
-    /* Central Terminal */
-    .terminal { flex: 1; border: 2px solid var(--green); padding: 10px; background: #000500; overflow-y: auto; display: flex; flex-direction: column-reverse; margin-bottom: 20px; box-shadow: 0 0 10px var(--dim-green); }
-    .line { margin-bottom: 2px; }
-    .line.sys { color: #55ff55; }
-    .line.error { color: #ff5555; }
-    .line.hack { color: #ffff55; }
-    .line.gold { color: gold; text-shadow: 0 0 5px gold; }
-
-    /* Action Deck (Programs) */
-    .deck { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; height: 120px;}
-    .program-btn { 
-        background: #001100; border: 1px solid var(--green); color: var(--green); 
-        cursor: pointer; font-family: inherit; font-size: 18px; padding: 5px;
-        display: flex; flex-direction: column; align-items: center; justify-content: center;
-        text-transform: uppercase;
+    /* Action Buttons Grid */
+    .deck { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; height: 130px; }
+    .hack-btn { 
+        background: #0a1a0a; border: 1px solid #2a4a2a; color: #aea; 
+        cursor: pointer; padding: 5px; display: flex; flex-direction: column; align-items: center; justify-content: center;
+        font-family: 'Heebo', sans-serif; transition:0.1s;
     }
-    .program-btn:hover { background: var(--green); color: black; }
-    .program-btn:disabled { opacity: 0.3; cursor: not-allowed; border-color: #333; color: #555; background:black;}
+    .hack-btn:hover { background: #1a3a1a; border-color: var(--green); }
+    .hack-btn strong { font-size: 16px; display:block; margin-bottom:4px;}
+    .hack-btn small { font-size: 12px; color: #777;}
     
-    /* Danger Overlay */
-    .busted { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: black; color: red; display: none; align-items: center; justify-content: center; flex-direction: column; font-size: 40px; z-index: 99;}
-    
-    .status-active { border: 1px solid gold; padding: 10px; margin-bottom: 20px; display: none; }
-    
+    .def-btn { border-color: #337; background: #0a0a1a; color: #aad;}
+    .def-btn:hover { border-color: #55f; }
+
+    /* Active Attack Panel */
+    .attack-panel { border: 2px solid var(--red); padding: 15px; margin-bottom: 15px; background: #1a0505; display:none;}
+    .fw-label { display:flex; justify-content:space-between; color: var(--red); font-weight:bold; font-size:14px; margin-bottom:5px;}
+    .fw-bar-bg { background: #300; width: 100%; height: 10px; }
+    .fw-bar-fill { background: var(--red); width: 100%; height: 100%; transition:0.2s;}
+
+    /* Game Over */
+    .busted-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 99; display:none; flex-direction:column; justify-content:center; align-items:center; color:red;}
 </style>
 </head>
 <body>
 
-<div id="busted-screen" class="busted">
-    <div>⚠️ CONNECTION TERMINATED</div>
-    <div style="font-size: 20px; margin-top:20px;">FBI IS AT YOUR DOOR.</div>
-    <button onclick="send('reset')" style="background:red; color:black; font-family:inherit; font-size:24px; border:none; margin-top:20px; cursor:pointer;">REBOOT SYSTEM</button>
+<div id="game-over" class="busted-overlay">
+    <h1 style="font-size:60px; text-shadow:0 0 20px red;">נתפסת!</h1>
+    <p>ה-IP שלך נחשף. המשטרה בדרך.</p>
+    <button onclick="send('reset')" style="background:red; color:black; font-size:24px; border:none; padding:10px 30px; cursor:pointer; font-weight:bold;">אתחול מערכת מחדש</button>
 </div>
 
-<div class="left-panel">
-    <div style="text-align:center; margin-bottom:20px; font-size:24px; text-shadow: 0 0 5px var(--green);">NET_RUNNER</div>
+<div class="sidebar">
+    <h1>🕵️ קוד אדום</h1>
     
-    <!-- Stats -->
-    <div class="bar-box">
-        <div class="label"><span>TRACE (משטרה)</span> <span id="txt-trace">0%</span></div>
-        <div class="progress-bg"><div class="progress-fill trace-fill" id="bar-trace"></div></div>
+    <div class="stat-box">
+        <div class="stat-label"><span>🚨 מעקב משטרתי</span> <span id="val-trace">0%</span></div>
+        <div class="bar-bg"><div class="bar-fill trace-fill" id="bar-trace"></div></div>
     </div>
     
-    <div class="bar-box">
-        <div class="label"><span>RAM (פעולות)</span> <span id="txt-ram">10/10</span></div>
-        <div class="progress-bg"><div class="progress-fill" id="bar-ram"></div></div>
+    <div class="stat-box">
+        <div class="stat-label"><span>🧠 זיכרון (RAM)</span> <span id="val-ram">10/10</span></div>
+        <div class="bar-bg"><div class="bar-fill" id="bar-ram"></div></div>
     </div>
     
-    <div style="border-top:1px solid #333; padding-top:10px; margin-top:10px;">
-        <div style="color:gold; font-size:24px;">₿ <span id="txt-btc">0.00</span></div>
-        <div style="font-size:16px; color:#aaa">CPU LEVEL: <span id="txt-cpu">1</span></div>
-    </div>
-
-    <!-- Upgrade Shop -->
-    <div style="margin-top:auto;">
-        <button class="program-btn" onclick="send('buy','ram')" style="width:100%; margin-bottom:5px;">
-            <small>UPGRADE RAM</small>
-        </button>
-        <button class="program-btn" onclick="send('buy','cpu')" style="width:100%;">
-            <small>UPGRADE CPU</small>
-        </button>
+    <div class="wallet">
+        <div class="stat-label">ארנק מוצפן:</div>
+        <div class="coin-val">₿ <span id="val-btc">0.0</span></div>
+        <div style="font-size:14px; color:#666; margin-top:5px;">עוצמת מעבד: Lv <span id="val-cpu">1</span></div>
+        
+        <div style="display:grid; gap:5px; margin-top:15px;">
+            <button class="hack-btn" onclick="send('buy','ram')" style="width:100%">שדרג זיכרון (+5)</button>
+            <button class="hack-btn" onclick="send('buy','cpu')" style="width:100%">שדרג מעבד (x1)</button>
+        </div>
     </div>
 </div>
 
-<div class="main-panel">
-    <!-- Active Target Info -->
-    <div class="status-active" id="active-panel">
-        <div style="display:flex; justify-content:space-between; align-items:center;">
-            <span>TARGET: <strong id="t-name">...</strong></span>
-            <button onclick="send('disconnect')" style="background:red; border:none; color:white; cursor:pointer; font-family:inherit;">[X] DISCONNECT</button>
+<div class="main-view">
+    <!-- Active Attack HUD -->
+    <div class="attack-panel" id="atk-hud">
+        <div class="fw-label">
+            <span>🔴 יעד תקיפה: <span id="tgt-name">...</span></span>
+            <button onclick="send('disconnect')" style="background:none; border:1px solid red; color:red; cursor:pointer;">[ נתק מגע ]</button>
         </div>
-        <div class="progress-bg" style="margin-top:10px; border-color:gold;">
-            <div class="progress-fill" id="bar-firewall" style="background:gold; width:100%"></div>
-        </div>
-        <div style="text-align:right; font-size:14px; color:gold;">FIREWALL INTEGRITY</div>
+        <div class="fw-bar-bg"><div class="fw-bar-fill" id="bar-fw"></div></div>
+        <div style="text-align:right; font-size:12px; color:#f55; margin-top:2px;">חומת אש</div>
     </div>
 
-    <div class="terminal" id="term"></div>
+    <!-- TERMINAL -->
+    <div class="terminal" id="console"></div>
     
-    <!-- Modes: Server List VS Attack Deck -->
-    <div id="mode-select" class="server-list"></div>
+    <!-- SELECTION OR ACTION -->
+    <div id="list-mode" class="server-list"></div>
     
-    <div id="mode-hack" class="deck" style="display:none;">
-        <button class="program-btn" onclick="send('run','brute_force')">
-            BRUTE FORCE
-            <small style="font-size:12px">2 RAM | Med Risk</small>
-        </button>
-        <button class="program-btn" onclick="send('run','sql_inject')">
-            SQL INJECT
-            <small style="font-size:12px">4 RAM | High DMG</small>
-        </button>
-        <button class="program-btn" onclick="send('run','rootkit')">
-            ROOTKIT
-            <small style="font-size:12px">8 RAM | MAX DMG</small>
-        </button>
-        <button class="program-btn" onclick="send('run','log_wiper')" style="color:#aaf; border-color:#aaf">
-            LOG WIPER
-            <small style="font-size:12px">-20% TRACE</small>
-        </button>
-        <button class="program-btn" onclick="send('run','proxy_hop')" style="color:#aaf; border-color:#aaf">
-            PROXY HOP
-            <small style="font-size:12px">-10% TRACE</small>
-        </button>
+    <div id="hack-mode" class="deck" style="display:none;">
+        <button class="hack-btn" onclick="send('run','brute_force')"><strong>👊 כוח גס</strong><small>2 RAM | סיכון נמוך</small></button>
+        <button class="hack-btn" onclick="send('run','sql_inject')"><strong>💉 הזרקת SQL</strong><small>4 RAM | נזק בינוני</small></button>
+        <button class="hack-btn" onclick="send('run','rootkit')"><strong>👑 השתלטות</strong><small>8 RAM | נזק קריטי</small></button>
+        <button class="hack-btn def-btn" onclick="send('run','proxy_hop')"><strong>👻 הסתר IP</strong><small>-10% מעקב</small></button>
+        <button class="hack-btn def-btn" onclick="send('run','log_wiper')"><strong>🧹 נקה לוגים</strong><small>-20% מעקב</small></button>
     </div>
 </div>
 
 <script>
     const API = "{{ api }}";
-    
     window.onload = ()=> send('init');
 
-    async function send(act, val=null){
+    async function send(act, val=null) {
         let res = await fetch(API, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({act:act, val:val})});
         let d = await res.json();
         
-        if(d.game_over) {
-            document.getElementById("busted-screen").style.display = "flex";
+        if (d.game_over) {
+            document.getElementById("game-over").style.display = "flex";
             return;
         } else {
-            document.getElementById("busted-screen").style.display = "none";
+            document.getElementById("game-over").style.display = "none";
         }
 
         let s = d.state;
         
-        // 1. Logs
-        let t = document.getElementById("term");
-        t.innerHTML = "";
-        d.log.forEach(line => {
-            t.innerHTML += `<div class="line ${line.type}">> ${line.text}</div>`;
-        });
-
-        // 2. Stats
-        document.getElementById("txt-trace").innerText = s.trace + "%";
+        // 1. Stats Update
+        document.getElementById("val-trace").innerText = s.trace + "%";
         document.getElementById("bar-trace").style.width = s.trace + "%";
         
-        document.getElementById("txt-ram").innerText = s.ram + "/" + s.max_ram;
-        let ramPct = (s.ram / s.max_ram)*100;
+        document.getElementById("val-ram").innerText = s.ram + "/" + s.max_ram;
+        let ramPct = (s.ram / s.max_ram) * 100;
         document.getElementById("bar-ram").style.width = ramPct + "%";
         
-        document.getElementById("txt-btc").innerText = s.bitcoin;
-        document.getElementById("txt-cpu").innerText = s.cpu_lvl;
+        document.getElementById("val-btc").innerText = s.bitcoin;
+        document.getElementById("val-cpu").innerText = s.cpu_lvl;
 
-        // 3. UI Mode Switcher
+        // 2. Terminal Log
+        let con = document.getElementById("console");
+        con.innerHTML = "";
+        d.log.forEach(l => {
+            con.innerHTML += `<div class="line ${l.type}">${l.text}</div>`;
+        });
+
+        // 3. Mode Switching
         if (s.connected_to) {
             // HACKING MODE
-            document.getElementById("mode-select").style.display = "none";
-            document.getElementById("mode-hack").style.display = "grid";
-            document.getElementById("active-panel").style.display = "block";
+            document.getElementById("list-mode").style.display = "none";
+            document.getElementById("hack-mode").style.display = "grid";
+            document.getElementById("atk-hud").style.display = "block";
             
-            // Active target update
-            let trg = s.connected_to;
-            document.getElementById("t-name").innerText = trg.name;
-            let fwPct = (trg.def / trg.max_def) * 100;
-            document.getElementById("bar-firewall").style.width = fwPct + "%";
+            let t = s.connected_to;
+            document.getElementById("tgt-name").innerText = t.name;
+            let fw = (t.def / t.max_def) * 100;
+            document.getElementById("bar-fw").style.width = fw + "%";
             
         } else {
-            // SELECTION MODE
-            document.getElementById("mode-select").style.display = "block";
-            document.getElementById("mode-hack").style.display = "none";
-            document.getElementById("active-panel").style.display = "none";
+            // LIST MODE
+            document.getElementById("list-mode").style.display = "flex";
+            document.getElementById("hack-mode").style.display = "none";
+            document.getElementById("atk-hud").style.display = "none";
             
-            // Build list
-            let listHTML = "";
+            let html = "";
             s.targets.forEach(t => {
-                listHTML += `
+                html += `
                 <div class="server-card" onclick="send('connect', '${t.id}')">
                     <div>
-                        <div class="server-name">${t.name}</div>
-                        <div style="font-size:14px; color:#555">Firewall: ${t.max_def} | Loot: ${t.reward} BTC</div>
+                        <div style="font-weight:bold">${t.name}</div>
+                        <div class="svr-info">הגנה: ${t.max_def} | רווח צפוי: ₿${t.reward}</div>
                     </div>
-                    <div class="open">CONNECT ></div>
+                    <div style="color:var(--green); font-size:20px;">></div>
                 </div>`;
             });
-            document.getElementById("mode-select").innerHTML = listHTML;
+            document.getElementById("list-mode").innerHTML = html;
         }
     }
 </script>
