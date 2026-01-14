@@ -180,9 +180,9 @@ MENU_HTML = """
             <div class="tag">מסע בחלל</div>
         </a>
         <a href="/game4/" class="card">
-            <span class="emoji-icon">4</span>
-            <h2>4</h2>
-            <div class="tag">4</div>
+            <span class="emoji-icon">🕵️‍♂️</span>
+            <h2>קוד אדום</h2>
+            <div class="tag">פרוץ, גנוב, היעלם</div>
         </a>
 
         <a href="/game5/" class="card">
