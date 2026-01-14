@@ -380,3 +380,42 @@ HTML = """
                 let pct = (sec.defense / sec.max_def) * 100;
                 
                 if(elHp) elHp.style.width = pct + "%";
+                
+                // שינוי צבע הבר בקריסה
+                if (pct < 30) elHp.style.backgroundColor = "red";
+                else if (k === "CORE") elHp.style.backgroundColor = "gold";
+                else elHp.style.backgroundColor = "#0f0";
+
+                // אפקט אזעקה אם החדר מותקף (פחות מ-100% הגנה)
+                let roomEl = document.getElementById("room-"+k);
+                if (roomEl) {
+                    if (pct < 100) roomEl.classList.add("danger-glow");
+                    else roomEl.classList.remove("danger-glow");
+                }
+            }
+
+            // לוג
+            let lb = document.getElementById("logbox");
+            lb.innerHTML = "";
+            d.log.reverse().forEach(l => {
+                lb.innerHTML += `<div class="log-line ${l.type}">${l.text}</div>`;
+            });
+
+        } catch(e) { console.error(e); }
+    }
+
+    function updateBar(id, val) {
+        document.getElementById("txt-"+id).innerText = val;
+        document.getElementById("bar-"+id).style.width = val + "%";
+        if(val < 20) document.getElementById("bar-"+id).style.backgroundColor = "red";
+    }
+    
+    // התחלה
+    window.onload = () => { act('init'); }; // סתם קריאה ראשונית לרענון מסך
+</script>
+</body>
+</html>
+"""
+
+if __name__ == "__main__":
+    app.run(port=5006, debug=True)
