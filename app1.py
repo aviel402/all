@@ -8,374 +8,394 @@ GAME_HTML = """
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>הישרדות: היום האחרון</title>
+    <title>SURVIVAL OS v2.0</title>
+    <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
     <style>
+        :root {
+            --bg: #050a10;
+            --panel: #0f1b29;
+            --primary: #00f2ff;
+            --accent: #ff0055;
+            --success: #00ff9d;
+            --warn: #ffae00;
+            --text: #e0f7ff;
+        }
+
         body {
-            background-color: #121212;
-            color: #e0e0e0;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            text-align: center;
+            background-color: var(--bg);
+            color: var(--text);
+            font-family: 'Share Tech Mono', 'Rubik', monospace; /* פונט בסגנון טרמינל */
             margin: 0;
-            padding: 10px;
             display: flex;
-            flex-direction: column;
+            justify-content: center;
             align-items: center;
             height: 100vh;
+            overflow: hidden;
         }
-        h1 { margin: 10px 0; color: #ff4444; font-size: 24px; text-transform: uppercase; letter-spacing: 2px; }
-        
-        .container {
+
+        .game-interface {
             width: 100%;
-            max-width: 400px;
-            background: #1e1e1e;
-            padding: 15px;
-            border-radius: 12px;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.8);
-            border: 1px solid #333;
-        }
-
-        .stats-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 10px;
-            margin-bottom: 15px;
-        }
-
-        .stat-box {
-            background: #2a2a2a;
-            padding: 8px;
-            border-radius: 8px;
-            text-align: left;
+            max-width: 420px;
+            height: 95vh;
+            background: var(--panel);
+            border: 2px solid var(--primary);
+            box-shadow: 0 0 20px rgba(0, 242, 255, 0.2);
+            border-radius: 15px;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
             position: relative;
         }
-        
-        .stat-label { font-size: 12px; color: #aaa; margin-bottom: 4px; display: block; }
-        .stat-bar-bg { background: #444; height: 6px; border-radius: 3px; width: 100%; }
-        .stat-bar { height: 100%; border-radius: 3px; transition: width 0.3s; }
 
-        .hp-bar { background: #d32f2f; }
-        .food-bar { background: #f57c00; }
-        .water-bar { background: #0288d1; }
-        .nrg-bar { background: #fbc02d; }
-
-        .time-display {
-            background: #000;
-            color: #fff;
-            padding: 10px;
-            border-radius: 5px;
-            margin-bottom: 15px;
-            font-weight: bold;
-            border: 1px solid #444;
-        }
-
-        .log-area {
-            background: #000;
-            height: 120px;
-            overflow-y: auto;
-            border: 1px solid #333;
-            padding: 10px;
-            text-align: right;
-            font-size: 13px;
-            margin-bottom: 15px;
-            color: #ccc;
-            font-family: monospace;
-        }
-        .log-entry { margin-bottom: 6px; border-bottom: 1px solid #222; padding-bottom: 4px; }
-        .log-bad { color: #ff5252; }
-        .log-good { color: #69f0ae; }
-        .log-info { color: #82b1ff; }
-
-        .inventory {
+        /* כותרת יום ושעה */
+        .hud-header {
             display: flex;
-            justify-content: space-around;
-            background: #252525;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(0, 242, 255, 0.1);
             padding: 10px;
             border-radius: 8px;
-            margin-bottom: 15px;
+            border: 1px solid var(--primary);
         }
-        .item { font-size: 14px; }
+        .day-counter { font-size: 20px; font-weight: bold; color: var(--primary); text-transform: uppercase; }
+        .time-badge { font-size: 14px; background: var(--bg); padding: 4px 8px; border-radius: 4px; border: 1px solid #333;}
 
-        .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-        button {
-            padding: 12px;
-            border: none;
-            border-radius: 6px;
-            background: #424242;
-            color: white;
-            font-weight: bold;
-            font-size: 14px;
-            cursor: pointer;
-            transition: 0.2s;
+        /* סטטים (Stats) */
+        .stats-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
         }
-        button:hover { background: #616161; }
-        button:disabled { opacity: 0.5; cursor: not-allowed; }
         
-        .btn-scavenge { background: #5d4037; grid-column: span 2; border: 1px solid #795548; }
-        .btn-rest { background: #303f9f; border: 1px solid #3f51b5; }
-        .btn-eat { background: #e65100; border: 1px solid #ff9800; }
-        .btn-drink { background: #01579b; border: 1px solid #039be5; }
-        .btn-heal { background: #b71c1c; grid-column: span 2; border: 1px solid #d32f2f; }
-
-        .overlay {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.95);
-            display: none; justify-content: center; align-items: center; flex-direction: column;
-            z-index: 100;
+        .stat-card {
+            background: #09121d;
+            padding: 8px;
+            border-radius: 6px;
+            border-right: 3px solid #333;
         }
-        .game-over-text { color: red; font-size: 40px; font-weight: bold; }
-        .restart-btn { background: white; color: black; margin-top: 20px; }
+        
+        .stat-header { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 5px; opacity: 0.8;}
+        .progress-bg { height: 8px; background: #222; width: 100%; border-radius: 4px; overflow: hidden; }
+        .progress-fill { height: 100%; width: 100%; transition: width 0.5s ease-out; box-shadow: 0 0 10px currentColor;}
+
+        /* צבעים דינמיים */
+        .hp-fill { background-color: var(--accent); color: var(--accent); border-right: 3px solid var(--accent); }
+        .fd-fill { background-color: var(--warn); color: var(--warn); border-right: 3px solid var(--warn);}
+        .wt-fill { background-color: var(--primary); color: var(--primary); border-right: 3px solid var(--primary);}
+        .en-fill { background-color: var(--success); color: var(--success); border-right: 3px solid var(--success);}
+
+        /* לוג (Terminal Log) */
+        .log-terminal {
+            flex-grow: 1;
+            background: #000;
+            border: 1px solid #333;
+            font-family: 'Share Tech Mono', monospace;
+            padding: 10px;
+            font-size: 13px;
+            overflow-y: auto;
+            color: #aaa;
+            box-shadow: inset 0 0 10px #000;
+            display: flex;
+            flex-direction: column-reverse; /* הודעות חדשות למעלה */
+        }
+        .msg { padding: 4px 0; border-bottom: 1px solid #111; }
+        .msg-good { color: var(--success); }
+        .msg-bad { color: var(--accent); }
+        .msg-sys { color: var(--primary); }
+
+        /* תיק (Inventory) */
+        .inventory-box {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+            background: rgba(255,255,255,0.03);
+            padding: 10px;
+            border-radius: 8px;
+        }
+        .inv-item {
+            text-align: center;
+            font-size: 12px;
+            background: #111;
+            padding: 5px;
+            border-radius: 4px;
+            border: 1px solid #333;
+        }
+        .inv-val { font-size: 16px; font-weight: bold; display: block; color:white; }
+
+        /* פעולות */
+        .action-deck {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: auto auto;
+            gap: 10px;
+        }
+        
+        .btn {
+            background: linear-gradient(145deg, #1a2c3d, #0f1925);
+            color: var(--text);
+            border: 1px solid rgba(0, 242, 255, 0.2);
+            padding: 15px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+            font-family: 'Rubik', sans-serif;
+            transition: all 0.2s;
+            display: flex; flex-direction: column; align-items: center;
+        }
+        .btn:active { transform: scale(0.95); box-shadow: none; }
+        .btn:hover { border-color: var(--primary); box-shadow: 0 0 15px rgba(0,242,255,0.1); background: #162635;}
+        
+        .btn-main { grid-column: 1 / -1; background: linear-gradient(145deg, #2a1a1a, #200f0f); border-color: var(--accent);}
+        .btn-main:hover { border-color: var(--accent); box-shadow: 0 0 15px rgba(255,0,85,0.2); }
+
+        /* מסך מוות */
+        .overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.9);
+            z-index: 100;
+            display: none;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            text-align: center;
+        }
+        .neon-text { color: var(--accent); text-shadow: 0 0 10px var(--accent); font-size: 40px; margin-bottom: 20px;}
 
     </style>
 </head>
 <body>
 
-    <h1>שורד: היום <span id="dayNum">1</span></h1>
-
-    <div class="container">
+    <div class="game-interface">
         
-        <div class="time-display" id="timeDisplay">☀️ צהריים (יום 1)</div>
+        <!-- Header -->
+        <div class="hud-header">
+            <div class="day-counter">DAY <span id="dayVal">1</span></div>
+            <div class="time-badge" id="timeBadge">☀️ 12:00</div>
+        </div>
 
-        <div class="stats-grid">
-            <div class="stat-box">
-                <span class="stat-label">❤️ בריאות <span id="val-hp">100</span>%</span>
-                <div class="stat-bar-bg"><div class="stat-bar hp-bar" id="bar-hp" style="width: 100%"></div></div>
+        <!-- Stats Bars -->
+        <div class="stats-container">
+            <div class="stat-card">
+                <div class="stat-header"><span>❤️ בריאות</span><span id="txt-hp">100%</span></div>
+                <div class="progress-bg"><div class="progress-fill hp-fill" id="bar-hp"></div></div>
             </div>
-            <div class="stat-box">
-                <span class="stat-label">⚡ אנרגיה <span id="val-nrg">100</span>%</span>
-                <div class="stat-bar-bg"><div class="stat-bar nrg-bar" id="bar-nrg" style="width: 100%"></div></div>
+            <div class="stat-card">
+                <div class="stat-header"><span>🍗 רעב</span><span id="txt-fd">100%</span></div>
+                <div class="progress-bg"><div class="progress-fill fd-fill" id="bar-fd"></div></div>
             </div>
-            <div class="stat-box">
-                <span class="stat-label">🍗 רעב <span id="val-food">100</span>%</span>
-                <div class="stat-bar-bg"><div class="stat-bar food-bar" id="bar-food" style="width: 100%"></div></div>
+            <div class="stat-card">
+                <div class="stat-header"><span>⚡ אנרגיה</span><span id="txt-en">100%</span></div>
+                <div class="progress-bg"><div class="progress-fill en-fill" id="bar-en"></div></div>
             </div>
-            <div class="stat-box">
-                <span class="stat-label">💧 צמא <span id="val-water">100</span>%</span>
-                <div class="stat-bar-bg"><div class="stat-bar water-bar" id="bar-water" style="width: 100%"></div></div>
+            <div class="stat-card">
+                <div class="stat-header"><span>💧 מים</span><span id="txt-wt">100%</span></div>
+                <div class="progress-bg"><div class="progress-fill wt-fill" id="bar-wt"></div></div>
             </div>
         </div>
 
-        <div class="inventory">
-            <div class="item">🥫 שימורים: <span id="inv-food">1</span></div>
-            <div class="item">🥤 מים: <span id="inv-water">1</span></div>
-            <div class="item">💊 תחבושת: <span id="inv-med">0</span></div>
+        <!-- Log -->
+        <div class="log-terminal" id="logBox">
+            <div class="msg msg-sys">> מערכת הישרדות אותחלה...</div>
+            <div class="msg">> ברוך הבא לעולם החדש.</div>
         </div>
 
-        <div class="log-area" id="log">
-            <div class="log-entry log-info">התעוררת במחסה. העולם הרוס. שרוד.</div>
+        <!-- Inventory -->
+        <div class="inventory-box">
+            <div class="inv-item">🥫 שימורים<span class="inv-val" id="inv-food">2</span></div>
+            <div class="inv-item">🥤 מים<span class="inv-val" id="inv-water">2</span></div>
+            <div class="inv-item">💊 תרופה<span class="inv-val" id="inv-med">1</span></div>
         </div>
 
-        <div class="actions">
-            <button class="btn-scavenge" onclick="action('scavenge')">🔎 צא לחפש משאבים (סיכון!)</button>
-            <button class="btn-eat" onclick="action('eat')">🥫 אכול</button>
-            <button class="btn-drink" onclick="action('drink')">🥤 שתה</button>
-            <button class="btn-rest" onclick="action('rest')">💤 לישון (סיים יום)</button>
-            <button class="btn-heal" onclick="action('heal')">💊 חבוש פצעים</button>
+        <!-- Buttons -->
+        <div class="action-deck">
+            <button class="btn btn-main" onclick="game.scavenge()">🔭 צא לסיור (חפש ציוד)</button>
+            <button class="btn" onclick="game.eat()">🥫 לאכול</button>
+            <button class="btn" onclick="game.drink()">🥤 לשתות</button>
+            <button class="btn" onclick="game.sleep()">💤 לישון (לילה)</button>
+            <button class="btn" onclick="game.heal()">💊 לרפא</button>
         </div>
-    </div>
 
-    <div class="overlay" id="gameOverScreen">
-        <div class="game-over-text">מוות</div>
-        <p style="color:white" id="deathReason">מתת מרעב</p>
-        <p style="color:#aaa">שרדת <span id="finalDays">0</span> ימים</p>
-        <button class="restart-btn" onclick="location.reload()">נסה שוב</button>
+        <!-- Game Over Overlay -->
+        <div class="overlay" id="endScreen">
+            <div class="neon-text">SYSTEM FAILURE</div>
+            <p style="color:white; margin-bottom:30px">מתת. הדרך הסתיימה.</p>
+            <button class="btn" onclick="location.reload()" style="background:var(--primary); color:black; width: 200px;">🔄 נסה מחדש</button>
+        </div>
+
     </div>
 
     <script>
-        // Game State
-        let stats = {
-            hp: 100,
-            food: 80,
-            water: 80,
-            nrg: 100
-        };
-        let inventory = {
-            food: 1,
-            water: 1,
-            med: 0
-        };
-        let day = 1;
-        let isNight = false; // מתחילים ביום
+        const game = {
+            stats: { hp: 100, food: 90, water: 90, nrg: 100 },
+            inv: { food: 2, water: 2, med: 1 },
+            day: 1,
+            isNight: false,
 
-        // Update UI Function
-        function updateUI() {
-            // Bars Width
-            document.getElementById('bar-hp').style.width = stats.hp + '%';
-            document.getElementById('bar-nrg').style.width = stats.nrg + '%';
-            document.getElementById('bar-food').style.width = stats.food + '%';
-            document.getElementById('bar-water').style.width = stats.water + '%';
+            // פונקציות עזר ללוגים ול-UI
+            log: function(txt, cls="msg") {
+                const box = document.getElementById("logBox");
+                const div = document.createElement("div");
+                div.className = "msg " + cls;
+                div.innerText = "> " + txt;
+                box.prepend(div);
+            },
 
-            // Text Values
-            document.getElementById('val-hp').innerText = stats.hp;
-            document.getElementById('val-nrg').innerText = stats.nrg;
-            document.getElementById('val-food').innerText = stats.food;
-            document.getElementById('val-water').innerText = stats.water;
+            updateUI: function() {
+                // עדכון מספרים
+                document.getElementById("txt-hp").innerText = Math.floor(this.stats.hp) + "%";
+                document.getElementById("txt-fd").innerText = Math.floor(this.stats.food) + "%";
+                document.getElementById("txt-en").innerText = Math.floor(this.stats.nrg) + "%";
+                document.getElementById("txt-wt").innerText = Math.floor(this.stats.water) + "%";
 
-            // Inventory
-            document.getElementById('inv-food').innerText = inventory.food;
-            document.getElementById('inv-water').innerText = inventory.water;
-            document.getElementById('inv-med').innerText = inventory.med;
+                // עדכון רוחב הברים
+                document.getElementById("bar-hp").style.width = this.stats.hp + "%";
+                document.getElementById("bar-fd").style.width = this.stats.food + "%";
+                document.getElementById("bar-en").style.width = this.stats.nrg + "%";
+                document.getElementById("bar-wt").style.width = this.stats.water + "%";
 
-            // World Info
-            document.getElementById('dayNum').innerText = day;
-            const timeText = isNight ? "🌑 לילה (מסוכן בחוץ)" : "☀️ יום (בטוח יחסית)";
-            document.getElementById('timeDisplay').innerText = timeText + " - יום " + day;
-            document.getElementById('timeDisplay').style.background = isNight ? "#1a237e" : "#000";
+                // עדכון מלאי
+                document.getElementById("inv-food").innerText = this.inv.food;
+                document.getElementById("inv-water").innerText = this.inv.water;
+                document.getElementById("inv-med").innerText = this.inv.med;
 
-            checkDeath();
-        }
-
-        function addLog(msg, type) {
-            const log = document.getElementById('log');
-            const entry = document.createElement('div');
-            entry.className = "log-entry " + type;
-            entry.innerText = "◄ " + msg;
-            log.prepend(entry);
-        }
-
-        function checkDeath() {
-            let reason = "";
-            if (stats.hp <= 0) reason = "מתת מפציעות ואיבוד דם.";
-            if (stats.food <= 0) reason = "גססת למוות מרעב.";
-            if (stats.water <= 0) reason = "התייבשת למוות.";
-
-            // מחסור חמור גורם נזק לבריאות
-            if (stats.food === 0) { stats.hp -= 10; addLog("הבטן שלך נדבקת לגב... (נזק!)", "log-bad"); }
-            if (stats.water === 0) { stats.hp -= 15; addLog("הגרון יבש כמו מדבר... (נזק קשה!)", "log-bad"); }
-
-            if (stats.hp <= 0 || stats.food <= 0 || stats.water <= 0) {
-                if (stats.hp <= 0) { // לוודא שמוות קורה רק ב-0 HP או מצב קיצוני
-                    document.getElementById('deathReason').innerText = reason || "הטבע ניצח אותך.";
-                    document.getElementById('finalDays').innerText = day;
-                    document.getElementById('gameOverScreen').style.display = 'flex';
+                // בדיקת מוות
+                if(this.stats.hp <= 0) {
+                    document.getElementById("endScreen").style.display = "flex";
                 }
-            }
-        }
+            },
 
-        // --- Core Logic ---
+            // --- פעולות המשחק (מאוזנות להיות קלות יותר) ---
 
-        function action(act) {
-            if (stats.hp <= 0) return;
-
-            // עלויות בסיסיות לכל פעולה
-            let hungerCost = 5;
-            let waterCost = 7;
-            let nrgCost = 5;
-
-            // ---- Scavenge (חיפוש) ----
-            if (act === 'scavenge') {
-                if (stats.nrg < 20) {
-                    addLog("אתה עייף מדי כדי לצאת! לך לישון.", "log-bad");
+            scavenge: function() {
+                if (this.stats.nrg < 10) {
+                    this.log("אין לך כוח לצאת! תנוח קצת.", "msg-bad");
                     return;
                 }
-                
-                nrgCost = 25;
-                hungerCost = 10;
-                waterCost = 15;
-                
-                let risk = isNight ? 0.7 : 0.3; // לילה הרבה יותר מסוכן (70%)
-                
-                addLog(isNight ? "יצאת בחשיכה..." : "יצאת לסרוק את השטח...", "log-info");
 
-                // חישוב מציאת חפצים
-                let foundSomething = false;
-                let rnd = Math.random();
+                this.log("יצאת לסרוק את השטח...", "msg-sys");
                 
-                if (rnd > 0.3) { // 70% למצוא משהו
-                    let loot = Math.random();
-                    if (loot < 0.4) { 
-                        inventory.food++; 
-                        addLog("מצאת קופסת שימורים ישנה! 🥫", "log-good"); 
-                    } else if (loot < 0.7) {
-                        inventory.water++;
-                        addLog("מצאת בקבוק מים! 🥤", "log-good");
-                    } else if (loot < 0.9) {
-                        inventory.med++;
-                        addLog("מצאת ערכת עזרה ראשונה! 💊", "log-good");
+                // מחיר פעולה (נמוך יותר מפעם)
+                this.stats.nrg -= 15;
+                this.stats.food -= 3;
+                this.stats.water -= 4;
+
+                // חישוב מציאת חפצים (סיכוי גבוה מאוד!)
+                const luck = Math.random();
+                if (luck > 0.1) { // 90% הצלחה
+                    const find = Math.random();
+                    if (find < 0.4) {
+                        this.inv.food++;
+                        this.log("מצאת קופסת שימורים!", "msg-good");
+                    } else if (find < 0.7) {
+                        this.inv.water++;
+                        this.log("מצאת מים נקיים!", "msg-good");
+                    } else if (find < 0.85) {
+                        this.inv.med++;
+                        this.log("מדהים! מצאת תרופה.", "msg-good");
                     } else {
-                        inventory.food++; inventory.water++;
-                        addLog("מזל! מצאת תרמיל עם אוכל ומים! 🎒", "log-good");
+                        // ה"דאבל" - מציאה כפולה
+                        this.inv.food++; this.inv.water++;
+                        this.log("Jackpot! מצאת גם אוכל וגם מים.", "msg-good");
                     }
-                    foundSomething = true;
                 } else {
-                    addLog("חזרת בידיים ריקות.", "log-bad");
+                    this.log("חזרת בידיים ריקות... מוזר.", "msg");
                 }
 
-                // חישוב פציעות (ריסק)
-                if (Math.random() < risk) {
-                    let dmg = Math.floor(Math.random() * 20) + 5;
-                    stats.hp -= dmg;
-                    let cause = isNight ? "להקת כלבים תקפה אותך בחושך!" : "נפלת ממהצוק ושברת רגל.";
-                    addLog(cause + " (-" + dmg + " HP)", "log-bad");
+                // סיכוי קטן לפציעה
+                if (Math.random() > 0.85) { // רק 15% סיכון
+                    const dmg = Math.floor(Math.random() * 10) + 2;
+                    this.stats.hp -= dmg;
+                    this.log("נשרטת בדרך חזרה (-" + dmg + " HP)", "msg-bad");
                 }
 
-            }
+                this.checkLimits();
+                this.updateUI();
+            },
 
-            // ---- Eat ----
-            if (act === 'eat') {
-                if (inventory.food > 0) {
-                    inventory.food--;
-                    stats.food = Math.min(100, stats.food + 35);
-                    stats.hp = Math.min(100, stats.hp + 5);
-                    addLog("פתחת קופסת שעועית קרה. טעים. (+35 רעב)", "log-good");
+            eat: function() {
+                if (this.inv.food > 0) {
+                    this.inv.food--;
+                    this.stats.food = Math.min(100, this.stats.food + 40); // ממלא הרבה
+                    this.stats.hp = Math.min(100, this.stats.hp + 5);
+                    this.log("אכלת לשובע. (+40)", "msg-good");
                 } else {
-                    addLog("אין לך אוכל! צא לחפש.", "log-bad");
-                    return;
+                    this.log("התיק ריק מאוכל!", "msg-bad");
                 }
-            }
+                this.updateUI();
+            },
 
-            // ---- Drink ----
-            if (act === 'drink') {
-                if (inventory.water > 0) {
-                    inventory.water--;
-                    stats.water = Math.min(100, stats.water + 40);
-                    stats.nrg = Math.min(100, stats.nrg + 5);
-                    addLog("המים מרווים. (+40 צמא)", "log-good");
+            drink: function() {
+                if (this.inv.water > 0) {
+                    this.inv.water--;
+                    this.stats.water = Math.min(100, this.stats.water + 50); // מרווה מאוד
+                    this.stats.nrg = Math.min(100, this.stats.nrg + 5);
+                    this.log("שתית מים קרים. (+50)", "msg-good");
                 } else {
-                    addLog("אין לך מים!", "log-bad");
-                    return;
+                    this.log("אין לך מים!", "msg-bad");
                 }
-            }
+                this.updateUI();
+            },
 
-            // ---- Rest / Sleep ----
-            if (act === 'rest') {
-                addLog(isNight ? "הלכת לישון עד הבוקר..." : "נחת קצת בצל עד הערב...", "log-info");
-                stats.nrg = Math.min(100, stats.nrg + 50); // שינה ממלאת המון אנרגיה
-                // בשינה הרעב והצמא גוברים משמעותית כי עובר זמן
-                hungerCost = 15;
-                waterCost = 15;
+            heal: function() {
+                if (this.inv.med > 0) {
+                    this.inv.med--;
+                    this.stats.hp = Math.min(100, this.stats.hp + 50); // ריפוי חזק
+                    this.log("השתמשת בתרופה. הבריאות משתפרת.", "msg-good");
+                } else {
+                    this.log("אין לך תרופות!", "msg-bad");
+                }
+                this.updateUI();
+            },
+
+            sleep: function() {
+                this.isNight = !this.isNight;
                 
-                // הופך יום ולילה
-                isNight = !isNight;
-                if (!isNight) {
-                    day++; // התחיל יום חדש
-                    addLog("--- התחיל יום " + day + " ---", "log-info");
-                }
-            }
+                // שינה מרפאה ונותנת כוח
+                this.stats.nrg = 100; // ממלא עד הסוף
+                this.stats.hp = Math.min(100, this.stats.hp + 10);
+                
+                // עולה "קצת" ברעב וצמא (לא מעניש מדי)
+                this.stats.food -= 10;
+                this.stats.water -= 10;
 
-            // ---- Heal ----
-            if (act === 'heal') {
-                if (inventory.med > 0) {
-                    inventory.med--;
-                    stats.hp = Math.min(100, stats.hp + 40);
-                    addLog("חבשת את הפצעים. מרגיש יותר טוב. (+40 HP)", "log-good");
+                let timeStr = this.isNight ? "🌙 לילה" : "☀️ יום";
+                
+                if (!this.isNight) {
+                    this.day++;
+                    document.getElementById("dayVal").innerText = this.day;
+                    this.log("======== בוקר יום " + this.day + " ========", "msg-sys");
                 } else {
-                    addLog("אין לך ציוד רפואי! צא לחפש תחבושות.", "log-bad");
-                    return;
+                    this.log("הלכת לישון. הלילה יורד...", "msg-sys");
+                }
+                
+                document.getElementById("timeBadge").innerText = timeStr;
+                
+                this.checkLimits();
+                this.updateUI();
+            },
+
+            checkLimits: function() {
+                // מונע מספרים שליליים
+                this.stats.food = Math.max(0, this.stats.food);
+                this.stats.water = Math.max(0, this.stats.water);
+                this.stats.nrg = Math.max(0, this.stats.nrg);
+                
+                // אם הגעת ל-0 באוכל או מים, יורד קצת HP (אבל לא מתים ישר)
+                if(this.stats.food === 0) {
+                    this.stats.hp -= 2;
+                    this.log("אתה גווע מרעב...", "msg-bad");
+                }
+                if(this.stats.water === 0) {
+                    this.stats.hp -= 3;
+                    this.log("אתה מיובש לחלוטין...", "msg-bad");
                 }
             }
+        };
 
-            // הורדת מדדים אחרי פעולה
-            stats.food = Math.max(0, stats.food - hungerCost);
-            stats.water = Math.max(0, stats.water - waterCost);
-            stats.nrg = Math.max(0, stats.nrg - nrgCost);
-
-            // אזהרות קריטיות
-            if (stats.food < 20) addLog("הבטן מקרקרת בטירוף...", "log-bad");
-            if (stats.water < 20) addLog("סחרחורת... חייב לשתות...", "log-bad");
-
-            updateUI();
-        }
-
+        // התחלה
+        game.updateUI();
     </script>
 </body>
 </html>
