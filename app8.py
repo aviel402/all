@@ -35,7 +35,7 @@ class Engine:
                 "hp": 20, "max_hp": 20,
                 "is_dead": False,
                 # נתוני זירה
-                "map_size": 5, # רדיוס 5 = מפה 10x10 (-5 עד 5)
+                "map_size": 7, # רדיוס 5 = מפה 10x10 (-5 עד 5)
                 "rivals": [], 
                 "map_content": {}, # מפלצות וגופות בחדרים
                 "visited": ["0,0"],
@@ -55,7 +55,7 @@ class Engine:
         for n in names:
             bot = {
                 "name": n,
-                "host": "rat", # כולם מתחילים חלשים
+                "host": "blob", # כולם מתחילים חלשים
                 "hp": 30, "max_hp": 30,
                 "x": random.randint(-4, 4),
                 "y": random.randint(-4, 4),
