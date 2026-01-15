@@ -4,430 +4,471 @@ import datetime
 from flask import Flask, render_template_string, request, jsonify, session, url_for
 
 app = Flask(__name__)
-# מפתח קבוע לשמירה על יציבות
-app.secret_key = 'red_code_fixed_v2'
+# מפתח חדש לאיפוס
+app.secret_key = 'cyber_ops_final_fix_v3'
 
 # ==========================================
-# 💾 מאגר נתונים (מאוזן יותר)
+# 💾 מאגר נתונים (DATABASE)
 # ==========================================
 PROGRAMS = {
-    # תקיפה
-    "brute_force": {"name": "כוח גס (BruteForce)", "cost_ram": 2, "dmg": 15, "risk": 4, "desc": "זול ומהיר."},
-    "sql_inject": {"name": "הזרקת קוד (SQL)", "cost_ram": 4, "dmg": 40, "risk": 8, "desc": "נזק בינוני."},
-    "rootkit": {"name": "השתלטות (Rootkit)", "cost_ram": 8, "dmg": 100, "risk": 15, "desc": "מכה קריטית."},
+    # התקפה
+    "p_brute": {"name": "BRUTE_FORCE", "ram": 2, "dmg": 15, "risk": 3, "desc": "זול ומהיר."},
+    "p_worm":  {"name": "SQL_WORM",    "ram": 4, "dmg": 35, "risk": 7, "desc": "נזק בינוני."},
+    "p_nuke":  {"name": "ZERO_DAY",    "ram": 8, "dmg": 100, "risk": 20, "desc": "מכה קריטית."},
     
-    # הגנה והסתרה
-    "log_wiper": {"name": "מחק לוגים", "cost_ram": 4, "effect": "reduce_trace", "val": 15, "desc": "מוריד 15% מהמעקב."},
-    "proxy_hop": {"name": "החלף IP", "cost_ram": 2, "effect": "reduce_trace", "val": 5, "desc": "פעולה מהירה להורדת מעקב."}
+    # הגנה
+    "d_clean": {"name": "LOG_CLEANER", "ram": 4, "heal_trace": 15, "desc": "-15% סיכון."},
+    "d_proxy": {"name": "PROXY_CHAIN", "ram": 3, "heal_trace": 5, "desc": "-5% סיכון, זול."}
 }
 
-TARGETS_DB = [
-    {"name": "קיוסק שכונתי", "def": 30, "reward": 50, "sec_level": 1},
-    {"name": "משרד רואי חשבון", "def": 80, "reward": 150, "sec_level": 1},
-    {"name": "שרת בנק הפועלים", "def": 250, "reward": 600, "sec_level": 2},
-    {"name": "מאגר ביומטרי", "def": 600, "reward": 1800, "sec_level": 3},
-    {"name": "כור בדימונה", "def": 2000, "reward": 10000, "sec_level": 4}
+TARGETS = [
+    {"name": "ATM שכונתי", "def": 30, "cash": 50, "sec": 1},
+    {"name": "שרת בית ספר", "def": 80, "cash": 120, "sec": 1},
+    {"name": "משרדי מס", "def": 250, "cash": 500, "sec": 2},
+    {"name": "תאגיד סייבר", "def": 800, "cash": 1500, "sec": 3},
+    {"name": "מחשב על צבאי", "def": 3000, "cash": 10000, "sec": 4}
 ]
 
 # ==========================================
-# ⚙️ מנוע ההאקינג (מתוקן)
+# ⚙️ לוגיקת משחק (Engine)
 # ==========================================
 class Engine:
     def __init__(self, state=None):
         if not state:
-            self.reset_state()
+            self.reset_game()
         else:
             self.state = state
 
-    def reset_state(self):
+    def reset_game(self):
         self.state = {
-            "bitcoin": 0,
-            "ram": 10,
-            "max_ram": 10,
-            "cpu_lvl": 1,
-            "trace": 0,
-            "connected_to": None,
+            "money": 0,
+            "ram": 10, "max_ram": 10,
+            "cpu": 1,
+            "trace": 0, "max_trace": 100,
+            "active_conn": None,
             "targets": [],
             "game_over": False,
-            "log": [{"text": "מערכת RedCode אותחלה. מוכן לפעולה.", "type": "sys"}]
+            "log": [{"time": self.now(), "txt": "SYSTEM ONLINE. Welcome, User.", "cls": "sys"}]
         }
-        self.refresh_targets()
+        self.regen_targets()
 
-    def log(self, txt, type="info"): 
-        ts = datetime.datetime.now().strftime("%H:%M:%S")
-        self.state["log"].insert(0, {"text": f"[{ts}] {txt}", "type": type})
-        if len(self.state["log"]) > 25: self.state["log"].pop()
+    def now(self):
+        return datetime.datetime.now().strftime("%H:%M:%S")
 
-    def refresh_targets(self):
+    def log(self, txt, cls="info"):
+        self.state["log"].insert(0, {"time": self.now(), "txt": txt, "cls": cls})
+        if len(self.state["log"]) > 30: self.state["log"].pop()
+
+    def regen_targets(self):
         self.state["targets"] = []
         for _ in range(4):
-            t = random.choice(TARGETS_DB).copy()
-            # וריאציה כדי שלא יהיה משעמם
-            variance = random.uniform(0.9, 1.3)
-            t["max_def"] = int(t["def"] * variance)
-            t["def"] = t["max_def"]
-            t["id"] = str(uuid.uuid4())[:8]
-            self.state["targets"].append(t)
+            base = random.choice(TARGETS).copy()
+            # קצת רנדומליות
+            mult = random.uniform(0.9, 1.2)
+            base["max_def"] = int(base["def"] * mult)
+            base["def"] = base["max_def"]
+            base["id"] = str(uuid.uuid4())
+            self.state["targets"].append(base)
 
-    # --- פעולות ---
+    # --- ACTIONS ---
 
-    def connect(self, target_id):
-        # מניעת חיבור כפול
-        if self.state["connected_to"]: return 
-
-        target = next((t for t in self.state["targets"] if t["id"] == target_id), None)
-        if target:
-            self.state["connected_to"] = target
-            self.log(f"התחברות ל-{target['name']} הצליחה.", "sys")
-        
-    def disconnect(self):
-        if not self.state["connected_to"]: return
-        
-        name = self.state["connected_to"]["name"]
-        self.state["connected_to"] = None
-        
-        # תיקון קריטי: מילוי RAM בהתנתקות
-        self.state["ram"] = self.state["max_ram"] 
-        self.log(f"התנתקת מ-{name}. זיכרון RAM טוהר.", "info")
-
-    def run_program(self, prog_key):
-        # הגנה מפני ריצה כשכבר נפסלת
+    def connect(self, t_id):
         if self.state["game_over"]: return
+        if self.state["active_conn"]: return
 
-        prog = PROGRAMS[prog_key]
+        tgt = next((t for t in self.state["targets"] if t["id"] == t_id), None)
+        if tgt:
+            self.state["active_conn"] = tgt
+            self.log(f"Connection Established: {tgt['name']}", "sys")
+
+    def disconnect(self):
+        if not self.state["active_conn"]: return
         
-        # האם יש מספיק RAM?
-        if self.state["ram"] < prog["cost_ram"]:
-            self.log("שגיאה: אין מספיק זיכרון (RAM). התנתק כדי לטעון מחדש.", "error")
+        self.state["active_conn"] = None
+        self.state["ram"] = self.state["max_ram"] # RESET RAM ON DISCONNECT (תיקון חשוב)
+        self.log("Disconnected. RAM flushed & restored.", "sys")
+
+    def run_prog(self, pid):
+        if self.state["game_over"]: return
+        prog = PROGRAMS[pid]
+        
+        # 1. בדיקת RAM
+        if self.state["ram"] < prog["ram"]:
+            self.log("ERROR: Insufficient RAM.", "err")
             return
 
-        self.state["ram"] -= prog["cost_ram"]
+        self.state["ram"] -= prog["ram"]
 
-        # --- מצב תקיפה (מחובר לשרת) ---
+        # 2. האם תוכנת התקפה?
         if "dmg" in prog:
-            if not self.state["connected_to"]:
-                self.log("שגיאה: אינך מחובר לשום יעד.", "error")
-                # מחזיר את ה-RAM כי הפעולה נכשלה
-                self.state["ram"] += prog["cost_ram"]
+            tgt = self.state["active_conn"]
+            if not tgt:
+                self.log("Error: No connection target.", "err")
+                self.state["ram"] += prog["ram"] # מחזיר עלות
                 return
-
-            target = self.state["connected_to"]
-            damage = prog["dmg"] * self.state["cpu_lvl"]
-            target["def"] -= damage
             
-            # העלאת סיכון (TRACE)
+            # חישוב נזק
+            dmg = prog["dmg"] * self.state["cpu"]
+            tgt["def"] -= dmg
+            
+            # עליית סיכון (Trace)
             risk = prog["risk"]
-            # אם השרת פרוץ כמעט לגמרי, הסיכון יורד קצת (בונוס)
             self.state["trace"] = min(100, self.state["trace"] + risk)
             
-            self.log(f"הפעלת {prog['name']} >> נזק: {damage}", "hack")
+            self.log(f"Executing {prog['name']} >> Damage: {dmg}", "hack")
             
-            if target["def"] <= 0:
-                self.hack_success(target)
+            # הצלחה?
+            if tgt["def"] <= 0:
+                reward = tgt["cash"]
+                self.state["money"] += reward
+                self.log(f"ACCESS GRANTED. Downloaded ${reward}", "win")
+                
+                # מחיקה ויצירה
+                self.state["targets"].remove(tgt)
+                self.state["active_conn"] = None
+                self.state["ram"] = self.state["max_ram"] # פרס
+                
+                if not self.state["targets"]:
+                    self.regen_targets()
 
-        # --- מצב הגנה (הורדת Trace) ---
-        elif "effect" in prog and prog["effect"] == "reduce_trace":
-            reduction = prog["val"] * self.state["cpu_lvl"] # מעבד חזק מנקה טוב יותר
-            self.state["trace"] = max(0, self.state["trace"] - reduction)
-            self.log(f"ניקוי עקבות בוצע. מעקב נוכחי: {self.state['trace']}%", "success")
+        # 3. האם תוכנת הגנה?
+        elif "heal_trace" in prog:
+            heal = prog["heal_trace"] * self.state["cpu"]
+            self.state["trace"] = max(0, self.state["trace"] - heal)
+            self.log(f"Traces deleted. Risk lowered by {heal}%.", "def")
 
-        # בדיקת הפסד
+        # 4. בדיקת מוות
         if self.state["trace"] >= 100:
             self.state["game_over"] = True
+            self.state["active_conn"] = None
+            self.log("SYSTEM COMPROMISED. FBI DETECTED.", "err")
 
-    def hack_success(self, target):
-        loot = target["reward"]
-        self.state["bitcoin"] += loot
-        
-        self.log(f"🎉 פריצה הושלמה! הרווחת ₿{loot}", "gold")
-        self.log("הקשר נותק אוטומטית למניעת זיהוי.", "info")
-        
-        # הסרה ורענון
-        if target in self.state["targets"]:
-            self.state["targets"].remove(target)
-        
-        self.state["connected_to"] = None
-        self.state["ram"] = self.state["max_ram"] # פרס: מילוי RAM
-        
-        if not self.state["targets"]:
-            self.refresh_targets()
-
-    # --- חנות ---
-    def upgrade(self, type):
+    def buy_upgrade(self, type):
+        if self.state["game_over"]: return
+        cost = 0
         if type == "ram":
-            cost = self.state["max_ram"] * 15 # מחיר עולה
-            if self.state["bitcoin"] >= cost:
-                self.state["bitcoin"] -= cost
+            cost = self.state["max_ram"] * 20
+            if self.state["money"] >= cost:
+                self.state["money"] -= cost
                 self.state["max_ram"] += 5
-                self.state["ram"] = self.state["max_ram"] # מילוי מידי
-                self.log(f"שודרג! זיכרון מקסימלי: {self.state['max_ram']}", "sys")
+                self.state["ram"] = self.state["max_ram"]
+                self.log(f"Upgrade Complete: RAM upgraded.", "win")
             else:
-                self.log(f"אין מספיק כסף. נדרש: {cost}", "error")
-
+                self.log(f"Not enough credits. Need ${cost}", "err")
         elif type == "cpu":
-            cost = self.state["cpu_lvl"] * 250
-            if self.state["bitcoin"] >= cost:
-                self.state["bitcoin"] -= cost
-                self.state["cpu_lvl"] += 1
-                self.log(f"שודרג! מעבד רמה: {self.state['cpu_lvl']}", "sys")
+            cost = self.state["cpu"] * 300
+            if self.state["money"] >= cost:
+                self.state["money"] -= cost
+                self.state["cpu"] += 1
+                self.log(f"Upgrade Complete: CPU upgraded.", "win")
             else:
-                self.log(f"אין מספיק כסף. נדרש: {cost}", "error")
+                self.log(f"Not enough credits. Need ${cost}", "err")
 
 # ==========================================
-# WEB SETUP
+# ROUTES
 # ==========================================
 @app.route("/")
-def index():
+def home():
     if "uid" not in session: session["uid"] = str(uuid.uuid4())
-    # שימוש בכתובת דינמית כדי למנוע את הבעיה בלאוצ'ר
-    api_url = url_for("handle_action")
-    return render_template_string(HTML, api=api_url)
+    api_url = url_for("api")
+    return render_template_string(UI, api=api_url)
 
-@app.route("/action", methods=["POST"])
-def handle_action():
-    try: 
-        # טוען משחק או מתחיל חדש אם המידע נשבר
-        eng = Engine(session.get("hacker_il_fixed"))
-    except: 
-        eng = Engine(None)
+@app.route("/api", methods=["POST"])
+def api():
+    try: eng = Engine(session.get("ops_game"))
+    except: eng = Engine(None)
     
-    d = request.json
-    act = d.get("act")
-    val = d.get("val")
+    req = request.json
+    act = req.get("a")
+    val = req.get("v")
     
-    if act == "reset": eng.reset_state()
-    elif act == "connect": eng.connect(val)
-    elif act == "disconnect": eng.disconnect()
-    elif act == "run": eng.run_program(val)
-    elif act == "buy": eng.upgrade(val)
+    if act == "reset": eng.reset_game()
+    elif act == "conn": eng.connect(val)
+    elif act == "disc": eng.disconnect()
+    elif act == "prog": eng.run_prog(val)
+    elif act == "buy": eng.buy_upgrade(val)
     
-    session["hacker_il_fixed"] = eng.state
-    
-    return jsonify({
-        "log": eng.state["log"],
-        "state": eng.state,
-        "programs": PROGRAMS
-    })
+    session["ops_game"] = eng.state
+    return jsonify({"s": eng.state, "progs": PROGRAMS})
 
 # ==========================================
-# UI - אותו עיצוב, מנוע חדש
+# DESIGN & UI (CYBERPUNK GLASS)
 # ==========================================
-HTML = """
+UI = """
 <!DOCTYPE html>
 <html lang="he" dir="rtl">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Red Code Pro</title>
-<link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;700&family=Courier+Prime&display=swap" rel="stylesheet">
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CYBER OPS</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap" rel="stylesheet">
 <style>
-    :root { --green: #00ff41; --dark: #0d0d0d; --panel: #111; --border: #222; --red: #ff3333; --gold: #ffd700;}
-    
-    body { background: #050505; color: var(--green); font-family: 'Courier Prime', monospace; margin: 0; height: 100vh; display: flex; overflow: hidden; font-size: 16px;}
-    
-    /* LEFT SIDEBAR (STATS) */
-    .sidebar { width: 300px; border-left: 2px solid var(--border); display: flex; flex-direction: column; padding: 20px; background: #080808; gap:20px;}
-    
-    .title-box { text-align: center; border-bottom: 2px solid var(--green); padding-bottom: 10px; margin-bottom: 10px;}
-    h1 { margin: 0; font-family: 'Rubik', sans-serif; letter-spacing: 1px;}
-
-    .meter-container { margin-bottom: 15px; }
-    .meter-label { display: flex; justify-content: space-between; font-size: 14px; margin-bottom: 5px; color:#888;}
-    .meter-bg { width: 100%; height: 12px; background: #222; border: 1px solid #444; border-radius: 2px;}
-    .meter-fill { height: 100%; width: 0%; transition: 0.3s; background: var(--green); }
-    .trace { background: var(--red); box-shadow: 0 0 10px var(--red); }
-    
-    .money-box { margin-top: auto; border: 1px solid var(--gold); padding: 15px; border-radius: 5px; text-align: center; }
-    .money-val { font-size: 30px; font-weight: bold; color: var(--gold); text-shadow: 0 0 5px #a88d00;}
-    
-    .shop-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
-    .shop-btn { background: #1a1a00; border: 1px solid #666; color: #ccb; padding: 5px; cursor: pointer; font-family: inherit;}
-    .shop-btn:hover { border-color: var(--gold); color: white;}
-
-    /* RIGHT MAIN */
-    .main { flex: 1; display: flex; flex-direction: column; padding: 20px; position: relative;}
-    
-    /* TERMINAL */
-    .terminal { flex: 1; border: 1px solid var(--border); background: #000; padding: 15px; overflow-y: auto; display: flex; flex-direction: column; margin-bottom: 20px; font-family:'Courier New'; border-radius: 5px;}
-    .log-line { margin-bottom: 4px; border-bottom: 1px solid #111; padding-bottom: 2px; }
-    .sys { color: #5f5; } .error { color: #f55; } .hack { color: #ffeb3b; } .gold { color: var(--gold); font-weight: bold;}
-
-    /* LIST OR HACK */
-    .viewport { height: 200px; border-top: 2px solid var(--border); padding-top: 15px; overflow-y:auto;}
-    
-    .server-card { background: var(--panel); padding: 12px; margin-bottom: 8px; border: 1px solid #333; border-radius: 4px; display:flex; justify-content:space-between; align-items:center; cursor: pointer; transition: 0.2s;}
-    .server-card:hover { border-color: var(--green); transform: translateX(-5px); }
-    
-    .active-hack-ui { display:none; flex-direction:column; gap: 10px; height: 100%;}
-    
-    .hack-header { display: flex; justify-content: space-between; align-items: center; color: white; background: #222; padding: 10px; border-radius: 4px;}
-    .firewall-bg { width: 100%; height: 8px; background: #400; margin-top: 10px; }
-    .firewall-fill { height: 100%; width: 100%; background: var(--red); transition: 0.2s; }
-    
-    .deck { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; flex: 1;}
-    .card-btn { 
-        background: #0a1a0a; border: 1px solid #2d4d2d; color: #afa; border-radius: 6px;
-        display: flex; flex-direction: column; align-items: center; justify-content: center;
-        cursor: pointer; transition: 0.1s; text-align: center;
+    :root {
+        --neon: #00ffc8;
+        --neon-bad: #ff0055;
+        --dark: #080a10;
+        --panel: rgba(10, 20, 30, 0.9);
+        --border: 1px solid rgba(0, 255, 200, 0.2);
     }
-    .card-btn:hover { background: #153515; border-color: #0f0; }
-    .card-btn strong { font-size: 14px; margin-bottom: 4px;}
-    .card-btn small { font-size: 11px; color: #7a7;}
-    .def { border-color: #44a; color: #aaf; background: #0a0a20;}
-    .def:hover { border-color: #88f; background: #1a1a40;}
+    
+    * { box-sizing: border-box; user-select: none; }
+    
+    body {
+        background: #020202; 
+        background-image: linear-gradient(rgba(0, 255, 200, 0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0, 255, 200, 0.03) 1px, transparent 1px);
+        background-size: 20px 20px;
+        color: var(--neon);
+        font-family: 'Share Tech Mono', monospace;
+        margin: 0; height: 100vh; display: flex; flex-direction: column;
+        overflow: hidden;
+    }
 
-    /* GAME OVER OVERLAY */
-    .overlay { position: fixed; top:0; left:0; width:100%; height:100%; background: black; display:none; flex-direction:column; justify-content:center; align-items:center; z-index:99;}
-    .overlay h1 { font-size: 80px; color: red; text-shadow: 0 0 30px red; margin:0;}
-    .reset-btn { font-size: 20px; padding: 15px 40px; background: red; color: black; border: none; cursor: pointer; margin-top: 20px; font-weight: bold;}
+    /* HEADER */
+    header {
+        height: 60px; display: flex; align-items: center; justify-content: space-between;
+        padding: 0 20px; background: var(--panel); border-bottom: var(--border);
+        box-shadow: 0 0 15px rgba(0, 255, 200, 0.1); z-index: 10;
+    }
+    .money { font-size: 24px; color: #ffbf00; text-shadow: 0 0 10px #ffbf00; }
+    
+    /* LAYOUT */
+    .grid { flex: 1; display: grid; grid-template-columns: 280px 1fr 300px; gap: 10px; padding: 15px; overflow: hidden; }
+    
+    /* PANELS */
+    .panel {
+        background: var(--panel); border: var(--border); border-radius: 8px;
+        display: flex; flex-direction: column; overflow: hidden; position: relative;
+    }
+    .panel h2 {
+        margin: 0; padding: 10px; background: rgba(0,255,200,0.05); 
+        font-size: 16px; border-bottom: var(--border); text-align: center;
+        letter-spacing: 2px;
+    }
 
+    /* 1. STATS (Left) */
+    .stat-row { padding: 15px; border-bottom: 1px dashed rgba(255,255,255,0.1); }
+    .label { font-size: 12px; color: #88a; display: flex; justify-content: space-between;}
+    .bar-bg { background: #111; height: 8px; margin-top: 5px; border-radius: 4px; overflow: hidden;}
+    .bar-fill { height: 100%; transition: width 0.3s; background: var(--neon); }
+    
+    .shop-btn {
+        width: 100%; background: transparent; border: 1px solid #446; color: #88a;
+        padding: 10px; cursor: pointer; margin-top: 10px; transition: 0.2s; font-family: inherit;
+    }
+    .shop-btn:hover { border-color: var(--neon); color: var(--neon); background: rgba(0,255,200,0.1);}
+
+    /* 2. TERMINAL (Middle) */
+    .terminal { flex: 1; background: black; padding: 10px; font-size: 13px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px;}
+    .log-entry { opacity: 0.8; }
+    .log-entry::before { content: "> "; color: #555; }
+    .t-time { color: #555; font-size: 10px; margin-right: 5px; }
+    .sys { color: #aaf; } .hack { color: #ffa; } .win { color: #0f0; } .err { color: #f55; } .def { color: #0ff; }
+
+    /* 3. TARGETS (Right) */
+    .target-list { flex: 1; overflow-y: auto; padding: 10px; }
+    .target-card {
+        background: #050505; border: 1px solid #334; padding: 10px; margin-bottom: 8px;
+        cursor: pointer; transition: 0.2s; position: relative; overflow: hidden;
+    }
+    .target-card:hover { border-color: var(--neon); transform: translateX(-5px); }
+    .t-name { font-weight: bold; font-size: 14px; }
+    .t-sub { font-size: 11px; color: #777; display: flex; justify-content: space-between; margin-top: 5px;}
+    
+    /* 4. ACTIVE HACK (Replaces targets) */
+    .hack-ui { display: none; flex-direction: column; height: 100%; padding: 10px; }
+    .firewall-box { text-align: center; margin-bottom: 20px; }
+    .firewall-hp { color: var(--neon-bad); font-size: 24px; font-weight: bold;}
+    
+    .deck { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; overflow-y: auto; }
+    .prog-btn {
+        background: rgba(0,0,0,0.5); border: 1px solid #334; color: #ccd;
+        padding: 10px; cursor: pointer; text-align: center; transition: 0.1s;
+    }
+    .prog-btn:hover:not(:disabled) { border-color: white; background: rgba(255,255,255,0.05); }
+    .prog-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+    
+    .prog-name { display: block; font-weight: bold; font-size: 13px;}
+    .prog-cost { font-size: 10px; color: #5aa; }
+    
+    .p-atk { border-color: #633; } .p-atk:hover:not(:disabled) { border-color: #f33; }
+    .p-def { border-color: #244; } .p-def:hover:not(:disabled) { border-color: #48f; }
+
+    .disc-btn { background: #311; color: #f55; border: 1px solid #500; margin-bottom: 10px; width: 100%; padding: 8px; cursor: pointer;}
+
+    /* GLITCH EFFECT & OVERLAY */
+    .game-over { 
+        position: fixed; inset: 0; background: rgba(0,0,0,0.9); z-index: 99; 
+        display: none; align-items: center; justify-content: center; flex-direction: column;
+    }
+    .glitch { font-size: 60px; color: red; text-shadow: 2px 2px 0px #0ff; animation: shake 0.5s infinite;}
+    
+    @keyframes shake { 0%{transform: translate(1px, 1px)} 50%{transform: translate(-1px, -2px)} 100%{transform: translate(0, 0)} }
+
+    @media (max-width: 800px) {
+        .grid { grid-template-columns: 1fr; grid-template-rows: auto 1fr auto; }
+        .sidebar, .targets { height: 250px; }
+    }
 </style>
 </head>
 <body>
 
-<!-- GAME OVER SCREEN -->
-<div id="over-scr" class="overlay">
-    <h1>נחשפת!</h1>
-    <div style="font-size:20px; color:#555">ה-IP שלך נשרף. כוחות ביטחון בדרך.</div>
-    <button class="reset-btn" onclick="api('reset')">נסה מחדש</button>
+<div id="over-scr" class="game-over">
+    <div class="glitch">SYSTEM FAILURE</div>
+    <div style="color:white; margin:20px;">IP TRACED. CONNECTION TERMINATED.</div>
+    <button onclick="api('reset')" style="background:var(--neon); border:none; padding:15px 30px; font-weight:bold; cursor:pointer;">REBOOT</button>
 </div>
 
-<!-- SIDEBAR -->
-<div class="sidebar">
-    <div class="title-box">
-        <h1>RED CODE</h1>
-        <small style="color:#666">TERMINAL v3.5</small>
-    </div>
-    
-    <div class="meter-container">
-        <div class="meter-label"><span>🛑 סיכון (Trace)</span> <span id="v-trc">0%</span></div>
-        <div class="meter-bg"><div class="meter-fill trace" id="b-trc"></div></div>
-    </div>
-    
-    <div class="meter-container">
-        <div class="meter-label"><span>🧠 זיכרון (RAM)</span> <span id="v-ram">10/10</span></div>
-        <div class="meter-bg"><div class="meter-fill" id="b-ram"></div></div>
-    </div>
-    
-    <div class="money-box">
-        <div class="coin-val">₿<span id="v-btc">0</span></div>
-        <div style="font-size:12px; color:#555;">ארנק קריפטו לא מזוהה</div>
-        <div style="margin-top:10px; font-size:14px; border-top:1px dashed #444; padding-top:5px;">
-            מעבד רמה: <span id="v-cpu" style="color:white">1</span>
-        </div>
-        
-        <div class="shop-grid">
-            <button class="shop-btn" onclick="api('buy','ram')">+5 RAM</button>
-            <button class="shop-btn" onclick="api('buy','cpu')">+1 CPU</button>
-        </div>
-    </div>
-</div>
+<header>
+    <div>CYBER OPS <span style="font-size:10px; color:#555;">v2.4</span></div>
+    <div class="money">$<span id="d-money">0</span></div>
+</header>
 
-<!-- MAIN CONTENT -->
-<div class="main">
-    <div class="terminal" id="term"></div>
-    
-    <div class="viewport">
-        <!-- SERVER LIST VIEW -->
-        <div id="view-list" style="display:block;">
-            <div style="color:#666; margin-bottom:10px;">שרתים זמינים לפריצה:</div>
-            <div id="servers-container"></div>
+<div class="grid">
+    <!-- STATS -->
+    <div class="panel">
+        <h2>SYSTEM STATUS</h2>
+        
+        <div class="stat-row">
+            <div class="label"><span>RISK LEVEL</span> <span id="d-trc">0%</span></div>
+            <div class="bar-bg"><div id="b-trc" class="bar-fill" style="background:var(--neon-bad)"></div></div>
         </div>
         
-        <!-- HACKING VIEW -->
-        <div id="view-hack" class="active-hack-ui">
-            <div class="hack-header">
-                <span id="target-name" style="font-weight:bold; color:#0f0;">TARGET</span>
-                <button onclick="api('disconnect')" style="background:none; border:1px solid #f55; color:#f55; padding:5px 10px; cursor:pointer;">✖ התנתק (נקה RAM)</button>
+        <div class="stat-row">
+            <div class="label"><span>RAM AVAILABLE</span> <span id="d-ram">10/10</span></div>
+            <div class="bar-bg"><div id="b-ram" class="bar-fill"></div></div>
+        </div>
+        
+        <div class="stat-row">
+            <div class="label">PROCESSOR: Lv.<span id="d-cpu">1</span></div>
+        </div>
+
+        <div style="margin-top:auto; padding:10px;">
+            <button class="shop-btn" onclick="api('buy','ram')">BUY RAM (+5) $150+</button>
+            <button class="shop-btn" onclick="api('buy','cpu')">BUY CPU (+x1) $300+</button>
+        </div>
+    </div>
+
+    <!-- TERMINAL -->
+    <div class="panel">
+        <h2>TERMINAL_OUTPUT</h2>
+        <div id="term" class="terminal"></div>
+    </div>
+
+    <!-- TARGETS -->
+    <div class="panel">
+        <h2>NETWORK TARGETS</h2>
+        
+        <!-- List Mode -->
+        <div id="ui-list" class="target-list"></div>
+        
+        <!-- Hack Mode -->
+        <div id="ui-hack" class="hack-ui">
+            <button class="disc-btn" onclick="api('disc')">✖ ABORT CONNECTION</button>
+            
+            <div class="firewall-box">
+                <div style="font-size:12px; color:#888;">FIREWALL STATUS</div>
+                <div id="fw-hp" class="firewall-hp">100%</div>
+                <div class="bar-bg" style="border-color:#500;"><div id="b-fw" class="bar-fill" style="background:red"></div></div>
             </div>
             
-            <div class="meter-bg" style="border-color:#f00; margin-top:-5px;">
-                <div id="target-hp" class="firewall-fill"></div>
-            </div>
-            <div style="text-align:left; font-size:12px; color:#f55;">FIREWALL STATUS</div>
-            
-            <div class="deck">
-                <button class="card-btn" onclick="api('run','brute_force')"><strong>BruteForce</strong><small>2 RAM / נמוך</small></button>
-                <button class="card-btn" onclick="api('run','sql_inject')"><strong>SQL Inject</strong><small>4 RAM / בינוני</small></button>
-                <button class="card-btn" onclick="api('run','rootkit')"><strong>ROOTKIT</strong><small>8 RAM / גבוה</small></button>
-                <button class="card-btn def" onclick="api('run','proxy_hop')"><strong>Proxy IP</strong><small>-5 Trace</small></button>
-                <button class="card-btn def" onclick="api('run','log_wiper')"><strong>Log Wipe</strong><small>-15 Trace</small></button>
+            <div id="prog-list" class="deck">
+                <!-- Programs injected here -->
             </div>
         </div>
     </div>
 </div>
 
 <script>
-    const API = "{{ api }}";
-    
-    // Auto start
-    window.onload = () => api("init");
+const API = "{{ api }}";
+let globalState = null;
 
-    async function api(act, val=null) {
-        let res = await fetch(API, {
-            method:'POST', headers:{'Content-Type':'application/json'},
-            body:JSON.stringify({act: act, val: val})
-        });
+window.onload = () => api('init');
+
+async function api(a, v=null) {
+    try {
+        let res = await fetch(API, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({act:a, val:v})});
         let d = await res.json();
-        let s = d.state;
-
-        // 1. GAME OVER CHECK
-        if(s.game_over) {
+        
+        if(d.s && d.s.game_over) {
             document.getElementById("over-scr").style.display = "flex";
             return;
         } else {
             document.getElementById("over-scr").style.display = "none";
         }
 
-        // 2. STATS UPDATE
-        updateMeter("ram", s.ram, s.max_ram);
-        updateMeter("trc", s.trace, 100);
-        document.getElementById("v-btc").innerText = s.bitcoin;
-        document.getElementById("v-cpu").innerText = s.cpu_lvl;
+        render(d);
+    } catch(e) { console.error(e); }
+}
 
-        // 3. LOG UPDATE
-        let t = document.getElementById("term");
-        t.innerHTML = "";
-        d.log.forEach(ln => {
-            t.innerHTML += `<div class="log-line ${ln.type}">> ${ln.text}</div>`;
-        });
+function render(d) {
+    let s = d.state;
+    globalState = s; // for tooltip logic maybe
+    
+    // Stats
+    document.getElementById("d-money").innerText = s.money;
+    document.getElementById("d-trc").innerText = s.trace + "%";
+    document.getElementById("b-trc").style.width = s.trace + "%";
+    
+    document.getElementById("d-ram").innerText = s.ram + "/" + s.max_ram;
+    let rp = (s.ram / s.max_ram) * 100;
+    document.getElementById("b-ram").style.width = rp + "%";
+    document.getElementById("d-cpu").innerText = s.cpu;
 
-        // 4. VIEW TOGGLE
-        if(s.connected_to) {
-            document.getElementById("view-list").style.display = "none";
-            document.getElementById("view-hack").style.display = "flex";
-            
-            // Update Hack View
-            let t = s.connected_to;
-            document.getElementById("target-name").innerText = ">> " + t.name;
-            let hp = (t.def / t.max_def) * 100;
-            document.getElementById("target-hp").style.width = hp + "%";
-            
-        } else {
-            document.getElementById("view-list").style.display = "block";
-            document.getElementById("view-hack").style.display = "none";
-            
-            // Build Server List
-            let sl = document.getElementById("servers-container");
-            sl.innerHTML = "";
-            s.targets.forEach(sv => {
-                sl.innerHTML += `
-                <div class="server-card" onclick="api('connect','${sv.id}')">
-                    <div>
-                        <strong>${sv.name}</strong><br>
-                        <small style="color:#777">הגנה: ${sv.max_def} | קופה: ₿${sv.reward}</small>
-                    </div>
-                    <div style="font-size:20px; color:#0f0;">⌨</div>
-                </div>`;
-            });
-        }
+    // Log
+    let t = document.getElementById("term");
+    t.innerHTML = "";
+    d.log.forEach(l => {
+        t.innerHTML += `<div class="log-entry ${l.cls}"><span class="t-time">${l.time}</span> ${l.txt}</div>`;
+    });
+
+    // View Switching
+    if(s.active_conn) {
+        document.getElementById("ui-list").style.display = "none";
+        document.getElementById("ui-hack").style.display = "flex";
+        renderHack(s, d.programs);
+    } else {
+        document.getElementById("ui-list").style.display = "block";
+        document.getElementById("ui-hack").style.display = "none";
+        renderList(s.targets);
     }
+}
 
-    function updateMeter(id, val, max) {
-        document.getElementById("v-"+id).innerText = (id==='trc') ? val+"%" : val+"/"+max;
-        let pct = (val / max) * 100;
-        document.getElementById("b-"+id).style.width = pct + "%";
+function renderList(list) {
+    let el = document.getElementById("ui-list");
+    el.innerHTML = "";
+    list.forEach(t => {
+        el.innerHTML += `
+        <div class="target-card" onclick="api('conn', '${t.id}')">
+            <div class="t-name">${t.name}</div>
+            <div class="t-sub">
+                <span>🛡️ ${t.max_def}</span>
+                <span style="color:#fc0">$${t.cash}</span>
+            </div>
+        </div>`;
+    });
+}
+
+function renderHack(s, progs) {
+    let t = s.active_conn;
+    let pct = (t.def / t.max_def) * 100;
+    document.getElementById("fw-hp").innerText = Math.ceil(pct) + "%";
+    document.getElementById("b-fw").style.width = pct + "%";
+    
+    let grid = document.getElementById("prog-list");
+    grid.innerHTML = "";
+    
+    for(let pid in progs) {
+        let p = progs[pid];
+        let typeClass = p.dmg ? "p-atk" : "p-def";
+        let disabled = s.ram < p.ram ? "disabled" : "";
+        
+        grid.innerHTML += `
+        <button class="prog-btn ${typeClass}" onclick="api('prog', '${pid}')" ${disabled}>
+            <span class="prog-name">${p.name}</span>
+            <span class="prog-cost">${p.ram} RAM</span>
+        </button>`;
     }
+}
 </script>
 </body>
 </html>
