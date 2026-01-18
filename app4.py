@@ -4,10 +4,11 @@ import datetime
 from flask import Flask, render_template_string, request, jsonify, session, url_for
 
 app = Flask(__name__)
-app.secret_key = 'hacker_elite_fixed_v88'
+# שינוי מפתח מוחק שאריות ישנות שגורמות לבאגים
+app.secret_key = 'hacker_il_v105_stable' 
 
 # ==========================================
-# 🛑 חלק שלא שונה (שורות 13-64 מהקוד שלך) 🛑
+# 🛑 חלק שלא שונה (לפי בקשתך 13-64)
 # ==========================================
 PROGRAMS = {
     # תוכנות התקפה (מורידות הגנה, מעלות סיכון)
@@ -59,7 +60,7 @@ TARGETS = [
 ]
 
 # ==========================================
-# ⚙️ מנוע המשחק המתוקן
+# ⚙️ מנוע המשחק
 # ==========================================
 class GameEngine:
     def __init__(self, state=None):
@@ -80,7 +81,7 @@ class GameEngine:
             "active_target": None, 
             "targets_list": [],
             "game_over": False,
-            "log": [{"time": self.getTime(), "txt": "המערכת מוכנה.", "c": "sys"}]
+            "log": [{"time": self.getTime(), "txt": "מערכת אותחלה. בהמתנה.", "c": "sys"}]
         }
         self.generate_targets()
 
@@ -90,8 +91,6 @@ class GameEngine:
 
     def generate_targets(self):
         self.state["targets_list"] = []
-        # בוחרים 5 מטרות רנדומליות מכל הרשימה הענקית
-        # (אפשר לשכלל שייבחר לפי הרמה הנוכחית של המעבד, אבל כרגע רנדומלי לחלוטין כמו שביקשת)
         for _ in range(5):
             base = random.choice(TARGETS).copy()
             base["max_def"] = int(base["def"] * random.uniform(0.9, 1.1))
@@ -99,7 +98,7 @@ class GameEngine:
             base["id"] = str(uuid.uuid4())
             self.state["targets_list"].append(base)
 
-    # --- Actions ---
+    # --- פעולות ---
 
     def connect(self, t_id):
         if self.state["active_target"]: return
@@ -111,7 +110,6 @@ class GameEngine:
     def disconnect(self):
         if not self.state["active_target"]: return
         self.state["active_target"] = None
-        # ✅ תיקון: מילוי RAM ביציאה
         self.state["ram"] = self.state["max_ram"] 
         self.log("התנתקת. RAM שוחרר והתמלא.", "def")
 
@@ -119,7 +117,7 @@ class GameEngine:
         if self.state["game_over"]: return
         prog = PROGRAMS[pid]
         
-        # ✅ תיקון: בדיקת חוסר RAM
+        # בדיקת RAM
         if self.state["ram"] < prog["ram"]:
             self.log("שגיאה: אין מספיק זיכרון! (התנתק כדי למלא)", "err")
             return
@@ -138,31 +136,27 @@ class GameEngine:
             
             self.log(f"הרצת {prog['name']}... נזק: {dmg}", "hack")
             
-            # בדיקת ניצחון
             if tgt["def"] <= 0:
                 amount = tgt["cash"]
                 self.state["money"] += amount
                 self.log(f"הצלחה! השגת ₪{amount}", "win")
                 self.state["targets_list"].remove(tgt)
                 self.state["active_target"] = None
-                self.state["ram"] = self.state["max_ram"] # מילוי RAM כבונוס
+                self.state["ram"] = self.state["max_ram"]
                 
                 if not self.state["targets_list"]:
                     self.generate_targets()
 
         elif prog["type"] == "def":
-            # הגנה אפשרית גם בלי להיות מחובר
             heal = prog["heal"] * self.state["cpu"]
             self.state["trace"] = max(0, self.state["trace"] - heal)
             self.log(f"ניקוי עקבות בוצע. (-{heal}% סיכון)", "def")
 
-        # בדיקת הפסד
         if self.state["trace"] >= 100:
             self.state["game_over"] = True
             self.state["active_target"] = None
 
     def buy(self, item):
-        # ✅ תיקון: בדיקה שיש כסף לפני קנייה
         cost = 0
         if item == "ram":
             cost = self.state["max_ram"] * 10
@@ -183,20 +177,24 @@ class GameEngine:
                 self.log(f"חסר כסף! (צריך ₪{cost})", "err")
 
 # ==========================================
-# APP ROUTES
+# SERVER ROUTING
 # ==========================================
 @app.route("/")
 def index():
     if "uid" not in session: session["uid"] = str(uuid.uuid4())
-    api = url_for("api_handle")
-    return render_template_string(HTML, api=api)
+    # כתובת דינמית כדי למנוע את באג המסך השחור
+    api_url = url_for("handle_action")
+    return render_template_string(HTML, api=api_url)
 
-@app.route("/api", methods=["POST"])
-def api_handle():
-    try: eng = GameEngine(session.get("hacker_il_final"))
-    except: eng = GameEngine(None)
+@app.route("/action", methods=["POST"])
+def handle_action():
+    try: 
+        # שים לב לשם הסשן החדש - מבטיח איפוס מוחלט של באגים ישנים
+        eng = GameEngine(session.get("hack_session_fix"))
+    except: 
+        eng = GameEngine(None)
     
-    d = request.json
+    d = request.json or {}
     act = d.get("a")
     val = d.get("v")
     
@@ -206,12 +204,12 @@ def api_handle():
     elif act == "exec": eng.execute(val)
     elif act == "buy": eng.buy(val)
     
-    session["hacker_il_final"] = eng.state
+    session["hack_session_fix"] = eng.state
     
     return jsonify({"s": eng.state, "progs": PROGRAMS})
 
 # ==========================================
-# UI (Green Neon Matrix Style)
+# UI
 # ==========================================
 HTML = """
 <!DOCTYPE html>
@@ -220,58 +218,93 @@ HTML = """
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>RedCode OS</title>
-<!-- חיבור נכון לפונט דיגיטלי -->
+<!-- חיבור תקין לפונט -->
 <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
 <style>
     :root { 
-        --neon: #0f0; --dim: #002200; --bg: #000; --panel: #050505; 
-        --border: 1px solid #0f0; --red: #ff3333; --gold: #ffd700;
+        --neon: #00ff41; 
+        --dim: #002200; 
+        --bg: #000; 
+        --panel: #050505; 
+        --border: 1px solid #00ff41; 
+        --red: #ff3333; 
+        --gold: #ffd700;
     }
-    body { background: var(--bg); color: var(--neon); font-family: 'Rubik', sans-serif; margin: 0; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
     
-    /* CRT Scanlines */
-    body::before { content:""; position:absolute; top:0; left:0; width:100%; height:100%; background: repeating-linear-gradient(0deg, rgba(0,0,0,0.1), rgba(0,0,0,0.1) 1px, transparent 1px, transparent 2px); pointer-events: none; z-index:9; }
+    * { box-sizing: border-box; }
+    
+    body {
+        background: var(--bg); color: var(--neon);
+        font-family: 'Rubik', monospace;
+        margin: 0; height: 100vh; display: flex; flex-direction: column; overflow: hidden;
+    }
+    
+    /* אפקט פסי סריקה (מטריקס) */
+    body::before { 
+        content:""; position:absolute; top:0; left:0; width:100%; height:100%; 
+        background: repeating-linear-gradient(0deg, rgba(0,0,0,0.1), rgba(0,0,0,0.1) 1px, transparent 1px, transparent 2px); 
+        pointer-events: none; z-index:9; 
+    }
 
-    /* Header */
-    .top { height: 60px; border-bottom: var(--border); background: #020202; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; z-index:10;}
+    /* HEADER */
+    .top { 
+        height: 60px; border-bottom: var(--border); background: #020202; 
+        display: flex; align-items: center; justify-content: space-between; padding: 0 20px; z-index:10;
+    }
     .brand { font-family: 'Share Tech Mono'; font-size: 24px; letter-spacing: 2px; }
     .cash { font-size: 20px; color: var(--gold); text-shadow: 0 0 5px var(--gold);}
 
-    /* Main Grid */
-    .grid { flex: 1; display: grid; grid-template-columns: 260px 1fr 280px; gap: 10px; padding: 10px; overflow: hidden; }
+    /* Main Grid - RTL AWARE */
+    .grid { flex: 1; display: grid; grid-template-columns: 260px 1fr 280px; gap: 10px; padding: 10px; position: relative; z-index: 5;}
     .col { display: flex; flex-direction: column; gap: 10px; height: 100%; }
     
-    .box { background: rgba(0, 15, 0, 0.9); border: 1px solid #004400; display: flex; flex-direction: column; padding: 10px; position: relative; border-radius: 4px; box-shadow: 0 0 10px rgba(0, 255, 0, 0.05); }
-    .box h3 { margin: 0 0 10px 0; font-size: 16px; border-bottom: 1px solid #004400; padding-bottom: 5px; color: #aaa; text-align: center; font-family: 'Share Tech Mono';}
+    .box { 
+        background: rgba(0, 15, 0, 0.9); border: var(--border); 
+        display: flex; flex-direction: column; padding: 10px; 
+        position: relative; border-radius: 4px; box-shadow: 0 0 10px rgba(0, 255, 0, 0.05); 
+    }
+    .box h3 { 
+        margin: 0 0 10px 0; font-size: 16px; border-bottom: 1px solid #004400; 
+        padding-bottom: 5px; color: #aaa; text-align: center; font-family: 'Share Tech Mono';
+    }
 
     /* Bars */
     .bar-wrap { margin-bottom: 15px; }
     .lbl { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 2px; }
-    .trck { width: 100%; height: 10px; background: #111; border: 1px solid #333; direction: ltr; /* Fix bar direction */ }
+    /* כיוון הבר תמיד משמאל לימין למרות העברית */
+    .trck { width: 100%; height: 12px; background: #111; border: 1px solid #333; direction: ltr; }
     .fill { height: 100%; width: 0%; transition: width 0.3s; background: var(--neon); }
     .trace-f { background: var(--red); box-shadow: 0 0 8px var(--red); }
 
     /* Terminal */
     .term { flex: 1; font-family: 'Share Tech Mono', monospace; font-size: 14px; overflow-y: auto; color: #ccc; }
-    .line { margin-bottom: 4px; border-bottom: 1px solid #111; padding-bottom: 2px; }
-    .ts { color: #444; font-size: 10px; margin-right: 5px; }
-    .sys { color: #0aa; } .err { color: #f44; } .hack { color: #ff0; } .win { color: #0f0; font-weight:bold; }
+    .ln { margin-bottom: 4px; padding-bottom: 4px; border-bottom: 1px solid #111; }
+    .ts { color: #444; font-size: 10px; margin-right: 5px; float: left;} /* זמן בצד שמאל */
+    .sys { color: #8cf; } .err { color: #f55; } .hack { color: #ff0; } .win { color: #0f0; font-weight:bold; } .def { color:#0ff; }
 
     /* Target List */
     .list { overflow-y: auto; flex: 1; }
-    .item { padding: 10px; border: 1px dashed #004400; margin-bottom: 5px; cursor: pointer; transition: 0.2s; display: flex; justify-content: space-between; align-items: center; }
-    .item:hover { background: #001100; border-color: #0f0; }
+    .item { 
+        padding: 10px; border: 1px dashed #004400; margin-bottom: 5px; cursor: pointer; transition: 0.2s; 
+        display: flex; justify-content: space-between; align-items: center; 
+    }
+    .item:hover { background: #001100; border-color: #0f0; transform:translateX(-5px); }
     
     /* Active Hack */
     .active-ui { display: none; flex-direction: column; height: 100%; }
-    .deck { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; flex: 1; align-content: start; overflow-y: auto; }
+    .deck { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; flex: 1; align-content: start; overflow-y: auto; margin-top:10px;}
+    
     .prog { 
         background: #001; border: 1px solid #004400; padding: 10px; cursor: pointer; 
-        color: #8f8; text-align: center; font-family: 'Rubik';
+        color: #8f8; text-align: center; font-family: 'Rubik'; font-size: 14px;
+        display:flex; flex-direction:column; justify-content:center; min-height: 50px;
     }
     .prog:hover { background: #002200; border-color: #0f0; color: #fff; }
-    .prog small { display: block; font-size: 10px; color: #555; margin-top: 3px; }
+    .prog small { display: block; font-size: 10px; color: #6a6; margin-top: 3px; }
     
+    .def-card { border-color: #004444; color: #0ff; } 
+    .def-card:hover{ border-color:cyan; background: #001111;}
+
     /* Shop */
     .shop { display: flex; gap: 5px; margin-top: auto; }
     .buy-btn { flex: 1; background: #000; border: 1px solid #444; color: #888; padding: 8px; cursor: pointer; font-size: 11px; }
@@ -280,6 +313,9 @@ HTML = """
     /* Responsive */
     @media (max-width: 900px) {
         .grid { grid-template-columns: 1fr; grid-template-rows: auto 1fr auto; }
+        .col:first-child { order: 2; height: 200px; } /* סטטוס באמצע */
+        .col:nth-child(2) { order: 3; height: 200px; } /* טרמינל למטה */
+        .col:nth-child(3) { order: 1; height: 300px; } /* מטרות למעלה */
     }
     
     /* Game Over */
@@ -290,7 +326,7 @@ HTML = """
 
 <div id="scr-over" class="overlay">
     <h1 style="font-size: 50px; text-shadow: 0 0 20px red;">מערכת נפרצה</h1>
-    <p>המשטרה בדרך אליך.</p>
+    <p>ה-IP שלך נשרף. כוחות משטרה בדרך.</p>
     <button onclick="api('reset')" style="background: red; border: none; padding: 10px 30px; font-weight: bold; cursor: pointer; font-size: 18px;">נסה שוב</button>
 </div>
 
@@ -307,12 +343,14 @@ HTML = """
             
             <div class="bar-wrap">
                 <div class="lbl"><span>סיכון (Trace)</span> <span id="l-trace">0%</span></div>
-                <div class="trck"><div class="fill trace-f" id="b-trace"></div></div>
+                <!-- מתוקן: מזהה נכון (b-trace) -->
+                <div class="trck"><div id="b-trace" class="fill trace-f"></div></div>
             </div>
             
             <div class="bar-wrap">
+                <!-- מתוקן: מזהה נכון (l-ram) -->
                 <div class="lbl"><span>זיכרון (RAM)</span> <span id="l-ram">10/10</span></div>
-                <div class="trck"><div class="fill" id="b-ram"></div></div>
+                <div class="trck"><div id="b-ram" class="fill"></div></div>
             </div>
             
             <div style="text-align: center; margin-bottom: 20px;">
@@ -339,17 +377,19 @@ HTML = """
         <div class="box" style="flex:1;">
             <h3>TARGET_NETWORK</h3>
             
-            <!-- LIST -->
+            <!-- List Mode -->
             <div id="ui-list" class="list"></div>
             
-            <!-- HACK -->
+            <!-- Hack Mode -->
             <div id="ui-hack" class="active-ui">
                 <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
                     <strong id="tgt-nm" style="color:yellow">Target</strong>
                     <button onclick="api('disc')" style="background:none; border:1px solid red; color:red; cursor:pointer;">[נתק]</button>
                 </div>
                 
-                <div class="trck" style="border-color:red; margin-bottom:10px;"><div id="b-def" class="fill" style="background:red; width:100%"></div></div>
+                <!-- מתוקן: חומת האש גם קיבלה direction:ltr -->
+                <div class="trck" style="border-color:red; margin-bottom:10px;"><div id="b-fw" class="fill" style="background:red; width:100%"></div></div>
+                <div style="font-size:10px; color:#f55; text-align:left;">FIREWALL</div>
                 
                 <div class="deck" id="progs"></div>
             </div>
@@ -358,38 +398,55 @@ HTML = """
 </div>
 
 <script>
-    const API = "{{ api }}";
+    const API = "{{ api }}"; // שימוש בכתובת הדינמית מהשרת
     
+    // Auto start
     window.onload = ()=> api('init');
 
     async function api(a, v=null){
-        let r = await fetch(API, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({a:a, v:v})});
-        let d = await res.json();
-        render(d.s, d.progs);
+        try {
+            let res = await fetch(API, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({a:a, v:v})});
+            let d = await res.json();
+            
+            // Game Over
+            if(d.s.game_over) {
+                document.getElementById("scr-over").style.display = "flex";
+                return;
+            } else {
+                document.getElementById("scr-over").style.display = "none";
+            }
+
+            render(d.s, d.progs);
+        } catch(e) {
+            console.error("Game Error:", e);
+        }
     }
 
     function render(s, progs){
-        // Game Over
-        document.getElementById("scr-over").style.display = s.game_over ? "flex" : "none";
-
-        // Values
+        // Stats Values
         document.getElementById("v-cash").innerText = s.money;
         document.getElementById("l-trace").innerText = s.trace + "%";
         document.getElementById("b-trace").style.width = s.trace + "%";
+        
+        // תיקון: השתמשנו ב- l-ram ב-HTML, אז גם ב-JS צריך l-ram
         document.getElementById("l-ram").innerText = s.ram + "/" + s.max_ram;
-        document.getElementById("b-ram").style.width = (s.ram/s.max_ram)*100 + "%";
+        
+        let ramPct = (s.ram / s.max_ram)*100;
+        document.getElementById("b-ram").style.width = ramPct + "%";
         document.getElementById("v-cpu").innerText = s.cpu;
         
         // Shop prices
         document.getElementById("c-ram").innerText = s.max_ram * 10;
         document.getElementById("c-cpu").innerText = s.cpu * 250;
 
-        // Terminal
+        // Terminal Log
         let tm = document.getElementById("term");
         tm.innerHTML = "";
-        s.log.forEach(l => tm.innerHTML += `<div class="line ${l.c}"><span class="ts">${l.time}</span> ${l.txt}</div>`);
+        s.log.forEach(l => {
+            tm.innerHTML += `<div class="ln ${l.c}"><span class="ts">${l.time}</span> ${l.txt}</div>`;
+        });
 
-        // Views
+        // Toggle Views
         if(s.active_target) {
             document.getElementById("ui-list").style.display="none";
             document.getElementById("ui-hack").style.display="flex";
@@ -398,14 +455,20 @@ HTML = """
             let t = s.active_target;
             document.getElementById("tgt-nm").innerText = t.name;
             let hp = (t.def / t.max_def)*100;
-            document.getElementById("b-def").style.width = hp + "%";
+            document.getElementById("b-fw").style.width = hp + "%";
             
-            // Programs
+            // Programs Grid
             let html="";
             for(let k in progs){
                 let p = progs[k];
-                html += `<button class="prog" onclick="api('exec','${k}')">
-                    ${p.name}
+                // מזהה לפי סוג התוכנה לעיצוב שונה
+                let cls = (p.type === "def") ? "def-card" : "";
+                
+                // בדיקת יכולת (האם יש מספיק RAM?)
+                let disabled = (s.ram < p.ram) ? "disabled" : "";
+                
+                html += `<button class="prog ${cls}" ${disabled} onclick="api('exec','${k}')">
+                    <span style="font-weight:bold">${p.name}</span>
                     <small>RAM: ${p.ram} | ${p.desc}</small>
                 </button>`;
             }
@@ -419,10 +482,10 @@ HTML = """
             s.targets_list.forEach(t => {
                 html += `<div class="item" onclick="api('conn','${t.id}')">
                     <div>
-                        <strong>${t.name}</strong><br>
+                        <div style="font-weight:bold">${t.name}</div>
                         <span style="font-size:11px; color:#666">הגנה: ${t.max_def} | קופה: ₪${t.cash}</span>
                     </div>
-                    <div style="color:lime">></div>
+                    <div style="color:var(--neon); font-size:20px;">➜</div>
                 </div>`;
             });
             document.getElementById("ui-list").innerHTML = html;
