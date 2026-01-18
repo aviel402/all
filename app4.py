@@ -217,9 +217,9 @@ HTML = """
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>RedCode OS</title>
+<title>קוד אדום</title>
 <!-- חיבור תקין לפונט -->
-<link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<link href="                                                       ;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
 <style>
     :root { 
         /* שנה את זה מ- #0f0 (ירוק) לאדום */
@@ -339,7 +339,7 @@ HTML = """
 </div>
 
 <div class="top">
-    <div class="brand">RedCode OS <span style="font-size:12px;color:#555">v4.0</span></div>
+    <div class="brand">RedCode OS <span style="font-size:12px;color:#555"></span></div>
     <div class="cash">₪<span id="v-cash">0</span></div>
 </div>
 
@@ -362,7 +362,7 @@ HTML = """
             </div>
             
             <div style="text-align: center; margin-bottom: 20px;">
-                מעבד (CPU): <span id="v-cpu" style="color:#fff; font-weight:bold;">1</span>
+                חוזק מעבד: <span id="v-cpu" style="color:#fff; font-weight:bold;">1</span>
             </div>
 
             <div class="shop">
@@ -375,7 +375,7 @@ HTML = """
     <!-- MID -->
     <div class="col">
         <div class="box" style="flex:1;">
-            <h3>TERMINAL_OUTPUT</h3>
+            <h3>טרמינל</h3>
             <div id="term" class="term"></div>
         </div>
     </div>
@@ -383,7 +383,7 @@ HTML = """
     <!-- RIGHT -->
     <div class="col">
         <div class="box" style="flex:1;">
-            <h3>TARGET_NETWORK</h3>
+            <h3>אפשרויות פריצה</h3>
             
             <!-- List Mode -->
             <div id="ui-list" class="list"></div>
