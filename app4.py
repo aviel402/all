@@ -222,11 +222,19 @@ HTML = """
 <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
 <style>
     :root { 
-        --neon: #00ff41; 
-        --dim: #002200; 
+        /* שנה את זה מ- #0f0 (ירוק) לאדום */
+        --neon: #ff0000; 
+        
+        /* שנה את זה מ- #002200 (רקע ירוק כהה) לרקע אדום כהה */
+        --dim: #330000; 
+        
+        /* את שאר השורות תשאיר אותו דבר... */
         --bg: #000; 
         --panel: #050505; 
-        --border: 1px solid #00ff41; 
+        
+        /* שנה גם את גבול המסגרת לאדום */
+        --border: 1px solid #ff0000; 
+        
         --red: #ff3333; 
         --gold: #ffd700;
     }
