@@ -1,47 +1,58 @@
 import random
 import uuid
+import math
 from flask import Flask, render_template_string, request, jsonify, session, url_for
 
 app = Flask(__name__)
-app.secret_key = f'{random.randint(1,1000)}'
+app.secret_key = 'war_royale_75_bots_v99'
 
 # ==========================================
-# 🧬 מאגר גופים
+# 🧬 מאגר גופים עצום (20+ סוגים)
 # ==========================================
 HOSTS = {
-    # חלשים (דרגה 1)
-    "blob":    {"name": "עיסה ירוקה", "icon": "🦠", "hp": 20, "atk": 2},
-    "rat":     {"name": "עכברוש", "icon": "🐀", "hp": 30, "atk": 5},
-    "drone":   {"name": "רחפן ריגול", "icon": "🛸", "hp": 25, "atk": 4},
-    
-    # לוחמים (דרגה 2)
-    "wolf":    {"name": "זאב", "icon": "🐺", "hp": 60, "atk": 12},
-    "soldier": {"name": "חייל עוין", "icon": "👮", "hp": 80, "atk": 15},
-    "alien":   {"name": "חייזר לוחם", "icon": "👽", "hp": 70, "atk": 18},
+    # -- עלובים (דרגה 1) --
+    "blob":    {"name": "עיסה", "icon": "🦠", "hp": 20, "atk": 3},
+    "fly":     {"name": "זבוב", "icon": "🪰", "hp": 10, "atk": 1},
+    "chicken": {"name": "תרנגולת", "icon": "🐔", "hp": 15, "atk": 5},
+    "rat":     {"name": "עכברוש", "icon": "🐀", "hp": 30, "atk": 6},
+    "spider":  {"name": "עכביש", "icon": "🕷️", "hp": 25, "atk": 8},
 
-    # חזקים (דרגה 3)
-    "robot":   {"name": "רובוט משוריין", "icon": "🤖", "hp": 150, "atk": 20},
-    "beast":   {"name": "מפלצת ביוב", "icon": "👹", "hp": 180, "atk": 25},
-    "dragon":  {"name": "דרקון זירה", "icon": "🐲", "hp": 300, "atk": 45}
+    # -- לוחמים (דרגה 2) --
+    "soldier": {"name": "חייל", "icon": "👮", "hp": 80, "atk": 15},
+    "wolf":    {"name": "זאב", "icon": "🐺", "hp": 60, "atk": 12},
+    "ninja":   {"name": "נינג'ה", "icon": "🥷", "hp": 50, "atk": 25},
+    "zombie":  {"name": "זומבי", "icon": "🧟", "hp": 70, "atk": 10},
+    "alien":   {"name": "חייזר", "icon": "👽", "hp": 90, "atk": 18},
+    "boxer":   {"name": "מתאגרף", "icon": "🥊", "hp": 100, "atk": 14},
+
+    # -- כבדים (דרגה 3) --
+    "gorilla": {"name": "גורילה", "icon": "🦍", "hp": 140, "atk": 20},
+    "robot":   {"name": "רובוט", "icon": "🤖", "hp": 150, "atk": 22},
+    "wizard":  {"name": "מכשף", "icon": "🧙‍♂️", "hp": 80, "atk": 40},
+    "tank":    {"name": "טנק", "icon": "🚜", "hp": 250, "atk": 10},
+    "demon":   {"name": "שד", "icon": "👺", "hp": 160, "atk": 28},
+
+    # -- בוסים אגדיים (דרגה 4) --
+    "dragon":  {"name": "דרקון", "icon": "🐲", "hp": 350, "atk": 50},
+    "rex":     {"name": "דינוזאור", "icon": "🦖", "hp": 300, "atk": 45},
+    "ufo":     {"name": "חללית", "icon": "🛸", "hp": 200, "atk": 60}
 }
 
+# שמות רנדומליים לבוטים
+BOT_PREFIX = ["סוכן", "לוחם", "פרויקט", "רוצח", "צל", "אומגה"]
+
+# ==========================================
+# ⚙️ מנוע הזירה (מתוקן)
+# ==========================================
 class Engine:
     def __init__(self, state=None):
         if not state or "rivals" not in state:
             self.state = {
-                "x": 0, "y": 0,
-                # סטטוס שחקן
-                "host": "blob",
-                "hp": 20, "max_hp": 20,
-                "is_dead": False,
-                # נתוני זירה
-                "map_size": 15, # רדיוס 5 = מפה 10x10 (-5 עד 5)
-                "rivals": [], 
-                "map_content": {}, # מפלצות וגופות בחדרים
-                "visited": ["0,0"],
-                "log": [{"text": "ברוך הבא לזירה 30x30. השמד את כל המתחרים.", "type": "sys"}]
+                "wins": 0,
+                "game_over": False,
+                "msg": ""
             }
-            self.init_arena()
+            self.start_match()
         else:
             self.state = state
 
@@ -49,295 +60,252 @@ class Engine:
         self.state["log"].append({"text": t, "type": type})
         if len(self.state["log"]) > 40: self.state["log"].pop(0)
 
-    def init_arena(self):
-        # יצירת 4 בוטים יריבים מפוזרים
-names = ["ראובן", "שמעון", "לוי", "יהודה", "יששכר", "זבולון", "משה", "יחיאל", "אליהו", "יצחק", "יוסף", "דניאל", "אברהם", "איתן", "שלמה", "יונתן", "אליעזר", "זכריה", "עמוס", "יוחנן", "מאיר", "רפאל", "צבי", "שחר", "שלום", "אורי", "אלחנן", "חיים", "שמואל", "ברוך", "חנוך", "צוריאל", "יואל", "אליעזר", "עמיחי", "עוזי", "ברק", "נתן", "צור", "גבריאל", "אהרון", "אלי", "משולם", "יוסף", "יואל", "חנניה", "הורדוס", "אריאל", "עזרא", "יוחאי", "נתנאל", "עזריאל", "אלימלך", "נחום", "ישעיהו", "רבקה", "שלום", "אליהו", "אוריאל", "תיאודור", "נפתלי", "שלום", "בנימין", "אלחנן", "יוסי", "מאור", "ציון", "שלמה", "איתן", "עמרם", "רפאל", "יחיאל", "אהרון", "משה", "ישראל", "אברהם", "יואב", "משה", "יונתן", "ליאון"]
-        for n in names:
-            bot = {
-                "name": n,
-                "host": "blob", # כולם מתחילים חלשים
-                "hp": 30, "max_hp": 30,
-                "x": random.randint(-15, 15),
-                "y": random.randint(-15, 15),
-                "dead": False
-            }
-            self.state["rivals"].append(bot)
-        
-        # מילוי הזירה במפלצות
-        for x in range(-5, 6):
-            for y in range(-5, 6):
-                if x==0 and y==0: continue # התחלה נקייה
-                
-                # 70% סיכוי למשהו בחדר
-                if random.random() < 0.7:
-                    rng = random.random()
-                    tier = "rat"
-                    if rng < 0.5: tier = random.choice(["rat", "drone"])
-                    elif rng < 0.8: tier = random.choice(["wolf", "soldier", "alien"])
-                    elif rng < 0.95: tier = random.choice(["robot", "beast"])
-                    else: tier = "dragon" # נדיר מאוד
-                    
-                    self.state["map_content"][f"{x},{y}"] = {
-                        "type": tier,
-                        "hp": HOSTS[tier]["hp"],
-                        "alive": True # האם המפלצת חיה או גופה
-                    }
-
     def pos(self): return f"{self.state['x']},{self.state['y']}"
 
-    # === מערכת AI משופרת (בוטים ומפלצות) ===
-    def process_ai(self):
-        px, py = self.state["x"], self.state["y"]
-        pos_key = self.pos()
-
-        # 1. תור הבוטים
-        for bot in self.state["rivals"]:
-            if bot["dead"]: continue
-            
-            # אם הבוט באותו חדר איתי
-            if bot["x"] == px and bot["y"] == py:
-                # הבוט לא תוקף אם הוא מת (מן הסתם) וגם לא תוקף אותך אם אתה רוח
-                if not self.state["is_dead"]:
-                    dmg = HOSTS[bot["host"]]["atk"]
-                    self.state["hp"] -= dmg
-                    self.log(f"⚠️ {bot['name']} בחדר ותוקף אותך! (-{dmg})", "danger")
-            
-            else:
-                # לוגיקת תנועה של בוט
-                # בודקים אם יש בוט אחר או מפלצת בחדר הנוכחי שלו
-                bot_pos = f"{bot['x']},{bot['y']}"
-                local_mon = self.state["map_content"].get(bot_pos)
-                
-                # אם יש מפלצת והיא חיה, הבוט נלחם בה
-                if local_mon and local_mon["alive"]:
-                    mon_dmg = HOSTS[local_mon["type"]]["atk"]
-                    bot_dmg = HOSTS[bot["host"]]["atk"]
-                    
-                    # הבוט חוטף מכה
-                    bot["hp"] -= mon_dmg
-                    
-                    # המפלצת חוטפת (סימולציה)
-                    # אם הבוט חזק, הוא מנצח ומשדרג גוף
-                    if bot["hp"] > 0 and (bot_dmg > mon_dmg or random.random() < 0.2):
-                        # הבוט ניצח
-                        local_mon["alive"] = False # מפלצת מתה
-                        # שדרוג אם הגוף טוב יותר
-                        if HOSTS[local_mon["type"]]["hp"] > bot["max_hp"]:
-                            bot["host"] = local_mon["type"]
-                            bot["max_hp"] = HOSTS[local_mon["type"]]["hp"]
-                            bot["hp"] = bot["max_hp"]
-                            # ההודעה מופיעה רק אם אתה קרוב
-                            if abs(bot['x']-px) < 3 and abs(bot['y']-py) < 3:
-                                self.log(f"שמעת צרחה... {bot['name']} שדרג גוף!", "warning")
-                    
-                    if bot["hp"] <= 0:
-                        bot["dead"] = True # הבוט מת בקרב PvE
-                        self.log(f"🎉 {bot['name']} מת איפשהו בזירה.", "gold")
-
-                else:
-                    # הבוט זז
-                    # אם השחקן קרוב (טווח 3), רודף אחריו. אחרת רנדומלי.
-                    dx, dy = 0, 0
-                    dist = abs(bot["x"] - px) + abs(bot["y"] - py)
-                    
-                    if dist <= 3 and not self.state["is_dead"]: # ציד
-                        dx = 1 if bot["x"] < px else (-1 if bot["x"] > px else 0)
-                        dy = 1 if bot["y"] < py else (-1 if bot["y"] > py else 0)
-                    else: # שוטטות
-                        dx = random.choice([-1, 0, 1])
-                        dy = random.choice([-1, 0, 1])
-                    
-                    # וידוא גבולות מפה 5+-
-                    bot["x"] = max(-5, min(5, bot["x"] + dx))
-                    bot["y"] = max(-5, min(5, bot["y"] + dy))
-
-        # 2. מפלצות חיות בחדר שלי תוקפות
-        my_room_mon = self.state["map_content"].get(pos_key)
-        if my_room_mon and my_room_mon["alive"] and not self.state["is_dead"]:
-            m_dat = HOSTS[my_room_mon["type"]]
-            # תוקפות חזרה תמיד
-            self.state["hp"] -= m_dat["atk"]
-            self.log(f"🩸 {m_dat['name']} נשך אותך (-{m_dat['atk']})", "danger")
-
-        # בדיקת מוות שלי בסוף התור
-        if self.state["hp"] <= 0 and not self.state["is_dead"]:
-            self.state["hp"] = 0
-            self.state["is_dead"] = True
-            self.log("☠️ מתת! הגוף נהרס. השתלט על מישהו או הפסד.", "critical")
-
-    # === פעולות ===
-    
-    def move(self, dx, dy):
-        if self.state["is_dead"]:
-            self.log("רוחות לא יכולות לעזוב את החדר. תשתלט!", "sys")
-            return
-
-        nx = self.state["x"] + dx
-        ny = self.state["y"] + dy
+    def start_match(self):
+        # איפוס נתונים
+        self.state["x"] = 0
+        self.state["y"] = 0
+        self.state["host"] = "soldier" # מתחילים כחייל
+        self.state["hp"] = 80
+        self.state["max_hp"] = 80
         
-        # גבולות מפה (קירות)
-        if nx < -5 or nx > 5 or ny < -5 or ny > 5:
-            self.log("🚧 הגעת לקיר החיצוני של הזירה.", "sys")
-            return
+        self.state["map_bound"] = 15 # גודל מפה (30x30)
+        self.state["rivals"] = []
+        self.state["corpses"] = {} 
+        self.state["visited"] = ["0,0"]
+        self.state["game_over"] = False
+        self.state["won_match"] = False
+        
+        # הודעת פתיחה
+        bot_count = 75 # המספר שביקשת
+        self.state["log"] = [{"text": f"הקרב מתחיל! {bot_count} בוטים נכנסו לזירה.", "type": "gold"}]
 
+        # יצירת צבא בוטים
+        types = list(HOSTS.keys())
+        for i in range(bot_count):
+            h_type = random.choice(types)
+            
+            # איזון: סיכוי נמוך לבוסים
+            if HOSTS[h_type]["hp"] > 200 and random.random() > 0.05:
+                h_type = "rat" # רובם חלשים
+
+            bot = {
+                "id": str(uuid.uuid4()),
+                "name": f"{random.choice(BOT_PREFIX)}-{random.randint(10,99)}",
+                "host": h_type,
+                "hp": HOSTS[h_type]["hp"],
+                "max": HOSTS[h_type]["hp"],
+                "x": random.randint(-15, 15),
+                "y": random.randint(-15, 15)
+            }
+            # מניעת חפיפה עם השחקן בהתחלה
+            if bot["x"]==0 and bot["y"]==0: bot["x"]=5 
+            
+            self.state["rivals"].append(bot)
+
+    # === AI System (בוטים נלחמים בכולם) ===
+    def process_turn(self):
+        if self.state["game_over"]: return
+
+        px, py = self.state["x"], self.state["y"]
+        next_rivals = []
+        
+        # מילון עזר למיקומים כדי לזהות קרבות בוט-נגד-בוט
+        # מפתח: "x,y", ערך: רשימת בוטים במיקום הזה
+        loc_map = {} 
+
+        # 1. תזוזה של הבוטים
+        for bot in self.state["rivals"]:
+            # בוט מתקרב לשחקן אם הוא קרוב (Hunt)
+            if abs(bot["x"]-px) <= 3 and abs(bot["y"]-py) <= 3:
+                dx = 1 if bot["x"] < px else (-1 if bot["x"] > px else 0)
+                dy = 1 if bot["y"] < py else (-1 if bot["y"] > py else 0)
+            else:
+                # תנועה רנדומלית
+                dx = random.choice([-1,0,1])
+                dy = random.choice([-1,0,1])
+            
+            bot["x"] = max(-15, min(15, bot["x"] + dx))
+            bot["y"] = max(-15, min(15, bot["y"] + dy))
+            
+            k = f"{bot['x']},{bot['y']}"
+            if k not in loc_map: loc_map[k] = []
+            loc_map[k].append(bot)
+
+        # 2. עיבוד קרבות
+        # אם יש במיקום של השחקן בוטים -> הם תוקפים את השחקן
+        # אם יש כמה בוטים באותו מיקום -> הם נלחמים ביניהם
+        
+        my_pos = self.pos()
+        
+        for k, bots_in_room in loc_map.items():
+            
+            # --- קרב: שחקן נגד בוטים ---
+            if k == my_pos:
+                for bot in bots_in_room:
+                    # בוט תוקף שחקן
+                    dmg = HOSTS[bot["host"]]["atk"] + random.randint(-2,2)
+                    self.state["hp"] -= max(1, dmg)
+                    self.log(f"🩸 {bot['name']} תקף אותך! (-{dmg})", "danger")
+            
+            # --- קרב: בוט נגד בוט (Battle Royale) ---
+            if len(bots_in_room) > 1:
+                # בוט אחד שורד, השאר חוטפים
+                attacker = bots_in_room[0]
+                target = bots_in_room[1]
+                
+                dmg = HOSTS[attacker["host"]]["atk"]
+                target["hp"] -= dmg
+                
+                if target["hp"] <= 0:
+                    # יצירת גופה מהבוט המת
+                    self.state["corpses"][k] = {"type": target["host"], "max": target["max"]}
+                    # בוט מת לא נכנס לרשימה הסופית
+                    continue 
+
+            # הבוטים ששרדו ממשיכים לסיבוב הבא
+            for b in bots_in_room:
+                if b["hp"] > 0:
+                    next_rivals.append(b)
+
+        self.state["rivals"] = next_rivals
+
+        # 3. בדיקות סוף משחק
+        if self.state["hp"] <= 0:
+            self.state["hp"] = 0
+            self.state["game_over"] = True
+            self.state["won_match"] = False
+            self.log("❌ מתת! אתה נפסל מהטורניר.", "critical")
+
+        if len(self.state["rivals"]) == 0 and not self.state["game_over"]:
+            self.state["game_over"] = True
+            self.state["won_match"] = True
+            self.state["wins"] += 1
+            self.log("🏆 ניצחון מוחלט! חיסלת את כולם.", "gold")
+
+    # === שליטת שחקן ===
+    def move(self, dx, dy):
+        if self.state["game_over"]: return
+        
+        nx = max(-15, min(15, self.state["x"] + dx))
+        ny = max(-15, min(15, self.state["y"] + dy))
         self.state["x"] = nx
         self.state["y"] = ny
         
-        pos = self.pos()
-        if pos not in self.state["visited"]: self.state["visited"].append(pos)
+        if self.pos() not in self.state["visited"]: self.state["visited"].append(self.pos())
+        self.process_turn()
+
+    def attack(self, idx):
+        if self.state["game_over"]: return
         
-        self.process_ai() # תור העולם
-
-    def attack(self, target_type, idx):
-        if self.state["is_dead"]: return # לא תוקפים כמתים
-
-        pos = self.pos()
-        my_stats = HOSTS[self.state["host"]]
-        my_dmg = my_stats["atk"] + random.randint(0, 3)
-        hit = False
-
-        # תקיפת מפלצת
-        if target_type == "monster":
-            mon = self.state["map_content"].get(pos)
-            if mon and mon["alive"]:
-                mon["hp"] -= my_dmg
-                self.log(f"פגעת במפלצת ({my_dmg}).", "success")
-                if mon["hp"] <= 0:
-                    mon["alive"] = False
-                    mon["hp"] = 0
-                    self.log("הרגת אותה! הגופה זמינה להשתלטות.", "gold")
-                hit = True
-
-        # תקיפת בוט
-        elif target_type == "bot":
-            # מוצאים את הבוט הספציפי ברשימה הכללית
-            active_bots = [b for b in self.state["rivals"] if f"{b['x']},{b['y']}"==pos and not b["dead"]]
-            if idx < len(active_bots):
-                bot = active_bots[idx]
-                bot["hp"] -= my_dmg
-                self.log(f"תקפת את {bot['name']} (-{my_dmg})", "success")
-                if bot["hp"] <= 0:
-                    bot["dead"] = True
-                    # משאירים גופה
-                    self.state["map_content"][pos] = {"type": bot["host"], "hp": 0, "alive": False}
-                    self.log(f"🏆 חיסלת את {bot['name']}!", "gold")
-                hit = True
-
-        # אם תקפנו - העולם מגיב (מי ששרד תוקף חזרה)
-        if hit:
-            self.process_ai()
-
-    def infect(self, target_type, idx):
-        # השתלטות - מותרת רק למתים
-        if not self.state["is_dead"]:
-            self.log("חייב להיות רוח כדי להשתלט.", "sys")
-            return
-
-        pos = self.pos()
-        new_type = None
+        # מחפש בוטים במיקום שלי
+        room_bots = [b for b in self.state["rivals"] if f"{b['x']},{b['y']}" == self.pos()]
+        if idx >= len(room_bots): return
         
-        # השתלטות על מפלצת (חיה או מתה - הטפיל נכנס פנימה)
-        if target_type == "monster":
-            mon = self.state["map_content"].get(pos)
-            if mon:
-                new_type = mon["type"]
-                # מוחקים מהמפה כי היא הופכת לשחקן
-                del self.state["map_content"][pos]
+        bot = room_bots[idx]
+        dmg = HOSTS[self.state["host"]]["atk"] + random.randint(0, 5)
+        bot["hp"] -= dmg
+        self.log(f"תקפת את {bot['name']} (-{dmg})", "success")
+        
+        if bot["hp"] <= 0:
+            self.log(f"💀 הרגת את {bot['name']}!", "gold")
+            self.state["corpses"][self.pos()] = {"type": bot["host"], "max": HOSTS[bot["host"]]["hp"]}
+            # מחיקה (נעשית בפועל ב-process_turn או כאן ידנית, ה-turn ינקה אותו כי ה-HP <=0)
+        
+        self.process_turn()
 
-        # השתלטות על בוט (הופך אותו למת אם הוא לא היה, ולוקח גוף)
-        elif target_type == "bot":
-            active_bots = [b for b in self.state["rivals"] if f"{b['x']},{b['y']}"==pos and not b["dead"]]
-            if idx < len(active_bots):
-                bot = active_bots[idx]
-                new_type = bot["host"]
-                bot["dead"] = True
-                self.log(f"הוצאת את הנשמה ל-{bot['name']} ולקחת לו את הגוף!", "gold")
-
-        if new_type:
-            self.state["host"] = new_type
-            self.state["max_hp"] = HOSTS[new_type]["hp"]
-            self.state["hp"] = self.state["max_hp"] # ריפוי מלא בגוף חדש
-            self.state["is_dead"] = False
-            self.log(f"🧬 קמת לתחייה בתור {HOSTS[new_type]['name']}!", "success")
+    def swap(self):
+        if self.state["game_over"]: return
+        pos = self.pos()
+        
+        if pos in self.state["corpses"]:
+            c_data = self.state["corpses"][pos]
             
-            # בוטים יגיבו לשינוי בתור הבא, לא מיידית
+            # שדרוג!
+            self.state["host"] = c_data["type"]
+            self.state["max_hp"] = HOSTS[c_data["type"]]["hp"]
+            self.state["hp"] = self.state["max_hp"] # ריפוי
+            
+            self.log(f"🧬 לקחת את הגוף של {HOSTS[c_data['type']]['name']}", "gold")
+            del self.state["corpses"][pos]
+            self.process_turn()
 
     def get_ui(self):
-        pos = self.pos()
-        
-        # 1. מידע מפה (רדאר 7x7 לרדיוס 3)
+        # מפה רדיוס 4 (9x9)
         grid = []
-        radius = 3 
         cx, cy = self.state["x"], self.state["y"]
+        radius = 4
         
         for dy in range(radius, -radius-1, -1):
             row = []
             for dx in range(-radius, radius+1):
-                tx, ty = cx + dx, cy + dy
+                tx, ty = cx+dx, cy+dy
                 k = f"{tx},{ty}"
-                cell = {"txt":"⬛", "cls":"fog"}
                 
-                # גבולות מפה
-                if tx < -5 or tx > 5 or ty < -5 or ty > 5:
-                    cell = {"txt":"🚫", "cls":"wall"}
+                sym = "⬛"
+                cls = "fog"
+                
+                # גבולות עולם (15)
+                if tx < -15 or tx > 15 or ty < -15 or ty > 15:
+                    sym = "🧱"
+                    cls = "wall"
+                
                 elif dx==0 and dy==0:
-                    cell = {"txt": "😊", "cls":"me"} # שחקן
+                    sym = "😎"
+                    cls = "me"
                 elif k in self.state["visited"] or (abs(dx)<=1 and abs(dy)<=1):
-                    # תוכן תא
-                    cont = self.state["map_content"].get(k)
-                    bots_here = [b for b in self.state["rivals"] if b["x"]==tx and b["y"]==ty and not b["dead"]]
+                    # בדיקת תוכן
+                    has_bot = any(b for b in self.state["rivals"] if b["x"]==tx and b["y"]==ty)
+                    has_dead = k in self.state["corpses"]
                     
-                    if bots_here: cell = {"txt":"🤖", "cls":"rival"}
-                    elif cont: 
-                        icon = HOSTS[cont["type"]]["icon"]
-                        cls = "alive" if cont["alive"] else "dead_body"
-                        cell = {"txt": icon, "cls": cls}
-                    else: cell = {"txt":"⬜", "cls":"empty"}
+                    if has_bot: 
+                        sym = "🔴"
+                        cls = "danger"
+                    elif has_dead:
+                        sym = "⚰️"
+                        cls = "loot"
+                    else:
+                        sym = "⬜"
+                        cls = "empty"
                         
-                row.append(cell)
+                row.append({"s":sym, "c":cls})
             grid.append(row)
 
-        # 2. אויבים בחדר
-        room_mon = self.state["map_content"].get(pos)
-        room_bots = [b for b in self.state["rivals"] if f"{b['x']},{b['y']}"==pos and not b["dead"]]
+        # נתוני זירה
+        room_bots = []
+        for i, b in enumerate(self.state["rivals"]):
+            if b["x"] == cx and b["y"] == cy:
+                b_info = b.copy()
+                b_info["idx"] = i # אינדקס אמיתי לא בטוח כאן, עדיף להעביר רק לתצוגה
+                # במערכת האמיתית פה נעשה מיפוי פשוט לתצוגה
+                room_bots.append({
+                    "name": b["name"], 
+                    "type": HOSTS[b["host"]]["name"],
+                    "icon": HOSTS[b["host"]]["icon"],
+                    "hp": b["hp"], 
+                    "max": b["max"]
+                })
         
-        # בדיקת ניצחון (האם כל הבוטים מתים?)
-        live_bots = len([b for b in self.state["rivals"] if not b["dead"]])
-        victory = (live_bots == 0)
-
-        # עיבוד מידע ל-JS
-        scene_objects = []
-        
-        if room_mon:
-            scene_objects.append({
-                "type": "monster", "idx": 0, 
-                "name": HOSTS[room_mon["type"]]["name"],
-                "icon": HOSTS[room_mon["type"]]["icon"],
-                "hp": room_mon["hp"],
-                "is_corpse": not room_mon["alive"]
-            })
-            
-        for i, b in enumerate(room_bots):
-            scene_objects.append({
-                "type": "bot", "idx": i,
-                "name": f"{b['name']} ({HOSTS[b['host']]['name']})",
-                "icon": HOSTS[b["host"]]["icon"],
-                "hp": b["hp"],
-                "is_corpse": False
-            })
+        corpse = None
+        if self.pos() in self.state["corpses"]:
+            ct = self.state["corpses"][self.pos()]["type"]
+            corpse = {"name": HOSTS[ct]["name"], "icon": HOSTS[ct]["icon"]}
 
         return {
             "map": grid,
             "log": self.state["log"],
-            "scene": scene_objects,
-            "player": {
+            "bots": room_bots,
+            "corpse": corpse,
+            "me": {
                 "name": HOSTS[self.state["host"]]["name"],
                 "icon": HOSTS[self.state["host"]]["icon"],
-                "hp": self.state["hp"], "max": self.state["max_hp"],
-                "dead": self.state["is_dead"],
-                "bots_left": live_bots,
-                "won": victory
-            }
+                "hp": self.state["hp"], "max": self.state["max_hp"]
+            },
+            "total_bots": len(self.state["rivals"]),
+            "win": self.state.get("won_match", False),
+            "dead": self.state.get("game_over", False) and not self.state.get("won_match", False),
+            "wins_count": self.state["wins"]
         }
 
 # ==========================================
@@ -346,24 +314,26 @@ names = ["ראובן", "שמעון", "לוי", "יהודה", "יששכר", "זב
 @app.route("/")
 def index():
     if "uid" not in session: session["uid"] = str(uuid.uuid4())
-    api = url_for("update")
-    return render_template_string(HTML, api=api)
+    return render_template_string(HTML, api=url_for("update"))
 
 @app.route("/api", methods=["POST"])
 def update():
-    try: eng = Engine(session.get("br_save"))
+    try: eng = Engine(session.get("war_royale"))
     except: eng = Engine(None)
     
-    d = request.json or {}
-    act = d.get("a")
-    val = d.get("v")
+    d = request.json
+    a = d.get("a")
+    v = d.get("v")
     
-    if act=="reset": eng = Engine(None)
-    elif act=="move": eng.move(*val)
-    elif act=="attack": eng.attack(*val)
-    elif act=="infect": eng.infect(*val)
+    if a=="start": eng = Engine(None)
+    elif a=="next": eng.init_match()
+    elif a=="move": eng.move(*v)
+    elif a=="atk": eng.attack(v) # כאן שולחים את המיקום היחסי בחדר (0, 1, 2)
+    # תיקון קטן: המערכת תתקוף את הראשון בחדר תמיד כדי למנוע סנכרון אינדקסים מסובך
+    elif a=="attack_first": eng.attack(0) 
+    elif a=="swap": eng.swap_body()
     
-    session["br_save"] = eng.state
+    session["war_royale"] = eng.state
     return jsonify(eng.get_ui())
 
 # ==========================================
@@ -374,176 +344,191 @@ HTML = """
 <html lang="he" dir="rtl">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PARASITE ROYALE</title>
+<title>TOTAL WAR 75</title>
 <style>
-    body { background: #111; color: #ccc; margin:0; font-family: monospace; display:flex; flex-direction:column; height:100vh; overflow:hidden;}
+    * { box-sizing: border-box; }
+    body { background: #111; color: #ddd; font-family: 'Segoe UI', sans-serif; margin:0; height:100vh; display:flex; flex-direction:column; overflow:hidden;}
     
-    /* Top: Info */
-    .header { background: #222; padding: 10px; display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #444;}
-    .stat { border:1px solid #555; padding:5px 10px; border-radius:5px; background:#000; font-size:12px;}
-    .rivals-count { color: #f55; font-weight:bold; animation: pulse 2s infinite; }
+    .top { height:60px; background:#222; display:flex; justify-content:space-between; align-items:center; padding:0 20px; border-bottom:2px solid #555;}
+    .stat-badge { background:#333; padding:5px 10px; border-radius:5px; border:1px solid #666; font-weight:bold;}
+    
+    .content { flex:1; display:flex; overflow:hidden;}
+    
+    /* RADAR */
+    .left-col { width:220px; background:#050505; border-left:1px solid #333; display:flex; flex-direction:column; align-items:center; padding:10px; justify-content:center;}
+    .grid { display:grid; gap:1px; background:#222; border:1px solid #444; width:200px; height:200px;}
+    .cell { display:flex; align-items:center; justify-content:center; background:#000; font-size:12px;}
+    .me { background:#0f0; border:1px solid white; z-index:2;}
+    .danger { background:red; animation: blink 0.5s infinite;}
+    .loot { background:gold; color:black;}
+    .fog { opacity:0.1; } .wall { background:#400; color:red;} .empty{background:#181818}
+    @keyframes blink { 50%{opacity:0.5}}
 
-    /* Main Area: Split Screen */
-    .content { flex:1; display:flex; height: 100%;}
+    /* MAIN STAGE */
+    .center-stage { flex:1; display:flex; flex-direction:column; background: radial-gradient(circle, #222, #000); padding:20px; align-items:center;}
+    .cards-area { flex:1; display:flex; gap:10px; flex-wrap:wrap; justify-content:center; align-content:center; overflow-y:auto; width:100%;}
     
-    /* Radar Left */
-    .radar-box { width: 40%; background: #050505; display:flex; flex-direction:column; justify-content:center; align-items:center; border-left:1px solid #333; padding:10px;}
-    .radar-grid { display:grid; grid-template-rows:repeat(7, 1fr); gap:1px; background:#222; width:100%; aspect-ratio:1; max-width:300px; border:2px solid #0f0;}
-    .r-row { display:grid; grid-template-columns:repeat(7, 1fr); gap:1px; }
-    .cell { display:flex; align-items:center; justify-content:center; font-size:16px; background:#000;}
+    .card { 
+        width:110px; height:140px; background:#2a2a2a; border:1px solid #555; border-radius:8px; 
+        display:flex; flex-direction:column; align-items:center; justify-content:space-between; padding:5px;
+        box-shadow:0 4px 10px rgba(0,0,0,0.5);
+    }
+    .c-btn { width:100%; padding:5px; border:none; cursor:pointer; border-radius:4px; font-weight:bold; }
     
-    .fog { background:#000; }
-    .wall { background:#330000; color:red; font-size:10px;}
-    .empty { background:#111; }
-    .room-monster { color:#aaa; background:#1a1a1a; }
-    .me { background:#0f0; box-shadow:0 0 10px lime; z-index:2;}
-    .danger { background:red; color:yellow; font-weight:bold; }
-    .alive { color: white; }
-    .dead_body { color: #555; text-decoration: line-through;}
+    .corpse-alert { 
+        margin-top:10px; padding:10px; background:#332a00; border:1px solid gold; 
+        color:gold; width:80%; text-align:center; border-radius:8px; display:none;
+        animation: pop 0.3s;
+    }
+    @keyframes pop { from{transform:scale(0);} to{transform:scale(1);} }
 
-    /* Scene Right */
-    .scene-box { flex:1; display:flex; flex-direction:column; padding:10px; background:#151515;}
-    .enemies-list { flex:1; overflow-y:auto; display:flex; flex-wrap:wrap; gap:10px; align-content: flex-start;}
-    .card { width:100px; height:130px; background:#222; border:1px solid #444; border-radius:6px; padding:5px; text-align:center; display:flex; flex-direction:column; justify-content:space-between;}
-    .dead-card { border-color:#555; opacity:0.7; filter: grayscale(100%); }
-    .live-card { border-color:#f55; }
-    
-    /* Log Bottom */
-    .log-container { height: 100px; background:#000; border-top:1px solid #444; padding:5px; font-size:12px; overflow-y:auto;}
-    .msg { border-bottom:1px solid #111; padding:2px;} .success { color:#afa; } .critical{color:red;font-weight:bold;}
+    /* LOGS */
+    .log-box { height:120px; background:#080808; border-top:1px solid #444; padding:10px; font-size:12px; font-family:monospace; overflow-y:auto;}
+    .msg { margin-bottom:2px;} .critical{color:red} .gold{color:gold} .success{color:#0f0}
 
-    /* Controls */
-    .controls { height: 120px; background:#222; border-top:2px solid #444; display:grid; grid-template-columns: 2fr 1fr; align-items:center;}
-    .d-pad { display:grid; grid-template-columns:repeat(3, 1fr); gap:5px; width:120px; direction:ltr; margin:0 auto;}
-    .btn { background:#333; border:1px solid #555; color:white; border-radius:5px; height:35px; cursor:pointer; font-size:18px;}
-    .btn:active{ background:#555;}
+    /* FOOTER / CONTROLS */
+    .controls { height:140px; background:#1b1b1b; display:grid; grid-template-columns: 1fr 200px 1fr; align-items:center; padding:0 20px;}
+    .d-pad { display:grid; grid-template-columns:repeat(3,1fr); gap:5px; width:140px; direction:ltr;}
+    .btn { height:40px; background:#333; border:1px solid #555; color:white; border-radius:5px; font-size:20px; cursor:pointer;}
+    .btn:active { background:#555;}
     
-    .u{grid-column:2} .l{grid-column:1; grid-row:2} .d{grid-column:2; grid-row:2} .r{grid-column:3; grid-row:2}
-    
-    .overlay { position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:99; display:none; flex-direction:column; justify-content:center; align-items:center; color:gold;}
-
-    @keyframes pulse { 50% { opacity:0.5; } }
+    .overlay { position:fixed; inset:0; background:rgba(0,0,0,0.95); display:none; flex-direction:column; justify-content:center; align-items:center; z-index:99; color:white;}
+    .big-btn { padding:15px 40px; font-size:24px; border:none; cursor:pointer; font-weight:bold; margin-top:20px;}
 </style>
 </head>
-<body id="body">
+<body>
 
-<div id="win-screen" class="overlay">
-    <h1>🏆 ניצחון מוחלט! 🏆</h1>
-    <h2>כל היריבים הושמדו.</h2>
-    <h3>אתה שליט הזירה.</h3>
-    <button onclick="s('reset')" style="padding:15px; font-size:20px; margin-top:20px; background:gold; border:none; cursor:pointer;">משחק חדש</button>
+<div id="o-win" class="overlay">
+    <h1 style="font-size:60px; color:gold">🏆 המנצח! 🏆</h1>
+    <p>חיסלת את כל 75 הבוטים.</p>
+    <button class="big-btn" style="background:gold" onclick="api('next')">שלב הבא (+1 נק')</button>
 </div>
 
-<div class="header">
-    <div style="display:flex; gap:10px; align-items:center;">
-        <span style="font-size:30px;" id="p-icon">🦠</span>
+<div id="o-lose" class="overlay">
+    <h1 style="font-size:60px; color:red">☠️ הובסת ☠️</h1>
+    <p>נפסלת מהתחרות.</p>
+    <button class="big-btn" style="background:red; color:white" onclick="api('start')">נסה שוב</button>
+</div>
+
+<div class="top">
+    <div style="display:flex; gap:10px; align-items:center">
+        <span style="font-size:30px" id="me-icon">🤠</span>
         <div>
-            <div id="p-name" style="font-weight:bold;">טוען...</div>
-            <div style="font-size:12px; color:#aaa"><span id="p-hp">0</span> HP</div>
+            <div id="me-name" style="font-weight:bold">...</div>
+            <div style="font-size:12px; color:#f66">HP: <span id="me-hp">0</span></div>
         </div>
     </div>
-    <div class="stat">בוטים נותרו: <span class="rivals-count" id="bot-count">4</span></div>
+    <div class="stat-badge">בוטים נותרו: <span id="cnt" style="color:red; font-size:18px">75</span></div>
+    <div class="stat-badge" style="color:gold">גביעים: <span id="wins">0</span></div>
 </div>
 
 <div class="content">
-    <div class="radar-box">
-        <small style="color:#0f0; margin-bottom:5px;">R.A.D.A.R</small>
-        <div class="radar-grid" id="map"></div>
+    <div class="left-col">
+        <small style="color:#0f0; margin-bottom:5px">RADAR (4x Range)</small>
+        <div class="grid" id="map"></div>
     </div>
-    <div class="scene-box">
-        <div style="font-size:11px; text-align:center; color:#555; margin-bottom:5px;">סריקה חזותית:</div>
-        <div class="enemies-list" id="scene"></div>
+    
+    <div class="center-stage">
+        <div class="cards-area" id="stage"></div>
+        
+        <div id="swap-box" class="corpse-alert">
+            <div>נמצאה גופה: <span id="c-name" style="font-weight:bold"></span></div>
+            <button class="c-btn" style="background:gold; margin-top:5px; color:black" onclick="api('swap')">♻️ קח גוף (רפא ל-100%)</button>
+        </div>
     </div>
 </div>
 
-<div class="log-container" id="log"></div>
+<div class="log-box" id="logs"></div>
 
 <div class="controls">
-    <button onclick="s('reset')" style="font-size:10px; height:30px; background:#400; border:none; color:#f88; width:50px; margin-right:20px;">RESET</button>
-    <div class="d-pad">
-        <button class="btn u" onclick="s('move',[0,1])">⬆</button>
-        <button class="btn l" onclick="s('move',[-1,0])">⬅</button>
-        <button class="btn d" onclick="s('move',[0,-1])">⬇</button>
-        <button class="btn r" onclick="s('move',[1,0])">➡</button>
+    <div>
+        <button onclick="api('start')" style="background:#400; color:#f88; border:none; padding:10px;">RESET</button>
     </div>
+    
+    <div class="d-pad">
+        <button class="btn" style="grid-column:2" onclick="api('move',[0,1])">⬆</button>
+        <button class="btn" style="grid-column:1; grid-row:2" onclick="api('move',[-1,0])">⬅</button>
+        <button class="btn" style="grid-column:2; grid-row:2" onclick="api('move',[0,-1])">⬇</button>
+        <button class="btn" style="grid-column:3; grid-row:2" onclick="api('move',[1,0])">➡</button>
+    </div>
+    
+    <div></div>
 </div>
 
 <script>
     const API = "{{ api }}";
-    
-    window.onload = ()=> s('init');
+    window.onload = ()=> api('');
 
-    async function s(act, val=null){
-        try{
-            let res = await fetch(API, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({a:act, v:val})});
-            let d = await res.json();
+    async function api(a, v=null) {
+        try {
+            let r = await fetch(API, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({a:a, v:v})});
+            let d = await r.json();
             
-            // Win?
-            if(d.player.won) document.getElementById("win-screen").style.display = "flex";
-            else document.getElementById("win-screen").style.display = "none";
+            // SCREENS
+            document.getElementById("o-lose").style.display = d.dead ? 'flex' : 'none';
+            document.getElementById("o-win").style.display = d.win ? 'flex' : 'none';
 
-            // Header
+            // INFO
             let p = d.player;
-            document.getElementById("p-icon").innerText = p.icon;
-            document.getElementById("p-name").innerText = p.dead ? "גוסס..." : p.name;
-            document.getElementById("p-hp").innerText = p.hp + "/" + p.max;
-            document.getElementById("bot-count").innerText = p.bots_left;
-            
-            if(p.dead) document.body.style.boxShadow = "inset 0 0 50px red";
-            else document.body.style.boxShadow = "none";
+            document.getElementById("me-icon").innerText = p.icon;
+            document.getElementById("me-name").innerText = p.name;
+            document.getElementById("me-hp").innerText = p.hp + "/" + p.max;
+            document.getElementById("cnt").innerText = d.total_bots;
+            document.getElementById("wins").innerText = d.wins_count;
 
-            // Map
-            let mh = "";
-            d.map.forEach(row=>{
-                row.forEach(c => mh+=`<div class="cell ${c.cls}">${c.txt}</div>`);
+            // MAP
+            let mh="";
+            d.map.forEach(row => {
+                row.forEach(c => mh+=`<div class='cell ${c.c}'>${c.s}</div>`);
             });
-            document.getElementById("map").innerHTML = mh;
-            document.getElementById("map").style.gridTemplateRows = `repeat(${d.map.length}, 1fr)`;
-            document.querySelectorAll(".cell").forEach(el=> el.parentElement.style.gridTemplateColumns=`repeat(${d.map[0].length}, 1fr)`);
+            let grid = document.getElementById("map");
+            grid.innerHTML = mh;
+            // 9x9 grid forced style
+            grid.style.gridTemplateColumns = `repeat(${d.map[0].length}, 1fr)`;
+            grid.style.gridTemplateRows = `repeat(${d.map.length}, 1fr)`;
 
-            // Scene
+            // STAGE (Enemies)
             let sh = "";
-            if(d.scene.length===0) sh = "<div style='width:100%; text-align:center; color:#444; margin-top:50px;'>שטח נקי.</div>";
+            if (d.bots.length === 0) sh = "<div style='color:#555'>השטח נקי... תמשיך לזוז.</div>";
             else {
-                d.scene.forEach(obj => {
-                    // Logic: Dead items only infected if player is dead. Live items attacked if player alive.
-                    let btn = "";
-                    let cardClass = obj.is_corpse ? "dead-card" : "live-card";
-                    let hpColor = obj.is_corpse ? "#555" : "#f55";
-                    
-                    if (p.dead) {
-                        btn = `<button style='background:#282; color:white; border:none; width:100%; cursor:pointer; border-radius:4px;' onclick="s('infect',['${obj.type}',${obj.idx}])">🧬 פלוש</button>`;
-                    } else if (!obj.is_corpse) {
-                        btn = `<button style='background:#822; color:white; border:none; width:100%; cursor:pointer; border-radius:4px;' onclick="s('attack',['${obj.type}',${obj.idx}])">⚔️ תקיפה</button>`;
-                    } else {
-                        btn = "<div style='font-size:10px; color:#555'>(גופה)</div>";
-                    }
-
-                    sh += `<div class="card ${cardClass}">
-                        <div style="font-size:30px;">${obj.icon}</div>
-                        <strong style="font-size:12px;">${obj.name}</strong>
-                        <div style="color:${hpColor}; font-size:11px;">${obj.hp} HP</div>
-                        ${btn}
+                d.bots.forEach(b => {
+                    sh += `<div class="card">
+                        <div style="font-size:30px;">${b.icon}</div>
+                        <div style="font-weight:bold; font-size:12px;">${b.name}</div>
+                        <div style="color:#aaa; font-size:10px;">${b.type}</div>
+                        <div style="color:#f55; font-size:12px;">${b.hp} HP</div>
+                        <button class="c-btn" style="background:#a22; color:white" onclick="api('attack_first')">⚔️ תקיפה</button>
                     </div>`;
                 });
             }
-            document.getElementById("scene").innerHTML = sh;
+            document.getElementById("stage").innerHTML = sh;
 
-            // Logs
-            let lh="";
-            d.log.slice().reverse().forEach(l=> lh+=`<div class="msg ${l.type}">${l.text}</div>`);
-            document.getElementById("log").innerHTML=lh;
+            // CORPSE UI
+            let sbox = document.getElementById("swap-box");
+            if (d.corpse) {
+                sbox.style.display = "block";
+                document.getElementById("c-name").innerText = d.corpse.icon + " " + d.corpse.name;
+            } else {
+                sbox.style.display = "none";
+            }
 
-        }catch(e){console.error(e);}
+            // LOG
+            let lh = "";
+            d.log.slice().reverse().forEach(l => {
+                lh += `<div class="msg ${l.type}">> ${l.text}</div>`;
+            });
+            document.getElementById("logs").innerHTML = lh;
+
+        } catch(e) { console.error(e); }
     }
     
-    // Arrows
-    window.addEventListener("keydown", e=>{
-        if(e.key=="ArrowUp") s('move',[0,1]);
-        if(e.key=="ArrowDown") s('move',[0,-1]);
-        if(e.key=="ArrowLeft") s('move',[-1,0]);
-        if(e.key=="ArrowRight") s('move',[1,0]);
-    });
+    // Keyboard
+    window.onkeydown = e => {
+        if(e.key=="ArrowUp" || e.key=="w") api('move',[0,1]);
+        if(e.key=="ArrowDown" || e.key=="s") api('move',[0,-1]);
+        if(e.key=="ArrowLeft" || e.key=="a") api('move',[-1,0]);
+        if(e.key=="ArrowRight" || e.key=="d") api('move',[1,0]);
+    }
 </script>
 </body>
 </html>
