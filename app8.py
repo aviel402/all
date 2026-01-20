@@ -1,52 +1,42 @@
 import random
 import uuid
-import math
 from flask import Flask, render_template_string, request, jsonify, session, url_for
 
 app = Flask(__name__)
-app.secret_key = 'war_royale_75_bots_v99'
+# מפתח יציב
+app.secret_key = 'battle_royale_stable_final_v55'
 
 # ==========================================
-# 🧬 מאגר גופים עצום (20+ סוגים)
+# 🧬 דמויות
 # ==========================================
 HOSTS = {
-    # -- עלובים (דרגה 1) --
-    "blob":    {"name": "עיסה", "icon": "🦠", "hp": 20, "atk": 3},
-    "fly":     {"name": "זבוב", "icon": "🪰", "hp": 10, "atk": 1},
-    "chicken": {"name": "תרנגולת", "icon": "🐔", "hp": 15, "atk": 5},
-    "rat":     {"name": "עכברוש", "icon": "🐀", "hp": 30, "atk": 6},
-    "spider":  {"name": "עכביש", "icon": "🕷️", "hp": 25, "atk": 8},
-
-    # -- לוחמים (דרגה 2) --
-    "soldier": {"name": "חייל", "icon": "👮", "hp": 80, "atk": 15},
-    "wolf":    {"name": "זאב", "icon": "🐺", "hp": 60, "atk": 12},
-    "ninja":   {"name": "נינג'ה", "icon": "🥷", "hp": 50, "atk": 25},
-    "zombie":  {"name": "זומבי", "icon": "🧟", "hp": 70, "atk": 10},
-    "alien":   {"name": "חייזר", "icon": "👽", "hp": 90, "atk": 18},
-    "boxer":   {"name": "מתאגרף", "icon": "🥊", "hp": 100, "atk": 14},
-
-    # -- כבדים (דרגה 3) --
-    "gorilla": {"name": "גורילה", "icon": "🦍", "hp": 140, "atk": 20},
+    # דרגה 1
+    "blob": {"name": "עיסה", "icon": "🦠", "hp": 25, "atk": 4},
+    "fly":  {"name": "זבוב", "icon": "🪰", "hp": 15, "atk": 2},
+    "rat":  {"name": "עכברוש", "icon": "🐀", "hp": 35, "atk": 6},
+    
+    # דרגה 2
+    "soldier": {"name": "חייל", "icon": "👮", "hp": 90, "atk": 15},
+    "wolf":    {"name": "זאב", "icon": "🐺", "hp": 70, "atk": 12},
+    "alien":   {"name": "חייזר", "icon": "👽", "hp": 100, "atk": 18},
+    
+    # דרגה 3 (חזקים)
     "robot":   {"name": "רובוט", "icon": "🤖", "hp": 150, "atk": 22},
-    "wizard":  {"name": "מכשף", "icon": "🧙‍♂️", "hp": 80, "atk": 40},
+    "beast":   {"name": "מפלצת", "icon": "👺", "hp": 180, "atk": 25},
     "tank":    {"name": "טנק", "icon": "🚜", "hp": 250, "atk": 10},
-    "demon":   {"name": "שד", "icon": "👺", "hp": 160, "atk": 28},
-
-    # -- בוסים אגדיים (דרגה 4) --
-    "dragon":  {"name": "דרקון", "icon": "🐲", "hp": 350, "atk": 50},
-    "rex":     {"name": "דינוזאור", "icon": "🦖", "hp": 300, "atk": 45},
-    "ufo":     {"name": "חללית", "icon": "🛸", "hp": 200, "atk": 60}
+    
+    # בוסים
+    "dragon":  {"name": "דרקון", "icon": "🐲", "hp": 350, "atk": 45}
 }
 
-# שמות רנדומליים לבוטים
-BOT_PREFIX = ["סוכן", "לוחם", "פרויקט", "רוצח", "צל", "אומגה"]
+BOT_NAMES = ["קילר", "נינג'ה", "ספקטר", "פנטום", "וייפר", "בלאק", "המשמיד", "צל", "נמסיס", "טיטאן"]
 
 # ==========================================
-# ⚙️ מנוע הזירה (מתוקן)
+# ⚙️ מנוע (מתוקן)
 # ==========================================
 class Engine:
     def __init__(self, state=None):
-        if not state or "rivals" not in state:
+        if not state or "wins" not in state:
             self.state = {
                 "wins": 0,
                 "game_over": False,
@@ -60,131 +50,92 @@ class Engine:
         self.state["log"].append({"text": t, "type": type})
         if len(self.state["log"]) > 40: self.state["log"].pop(0)
 
-    def pos(self): return f"{self.state['x']},{self.state['y']}"
+    def pos_key(self, x, y): return f"{x},{y}"
 
     def start_match(self):
-        # איפוס נתונים
-        self.state["x"] = 0
-        self.state["y"] = 0
-        self.state["host"] = "soldier" # מתחילים כחייל
-        self.state["hp"] = 80
-        self.state["max_hp"] = 80
+        # אתחול סיבוב חדש
+        self.state.update({
+            "x": 0, "y": 0,
+            "host": "soldier",
+            "hp": 90, "max_hp": 90,
+            "map_size": 15, # מפה ענקית (-15 עד 15)
+            "rivals": [],
+            "corpses": {},
+            "visited": ["0,0"],
+            "game_over": False,
+            "win_status": False,
+            "log": [{"text": f"הקרב מתחיל! מטרות: 75", "type": "gold"}]
+        })
         
-        self.state["map_bound"] = 15 # גודל מפה (30x30)
-        self.state["rivals"] = []
-        self.state["corpses"] = {} 
-        self.state["visited"] = ["0,0"]
-        self.state["game_over"] = False
-        self.state["won_match"] = False
+        # יצירת 75 בוטים בפיזור חכם
+        used_spots = set(["0,0"]) # המקום שלי תפוס
         
-        # הודעת פתיחה
-        bot_count = 75 # המספר שביקשת
-        self.state["log"] = [{"text": f"הקרב מתחיל! {bot_count} בוטים נכנסו לזירה.", "type": "gold"}]
-
-        # יצירת צבא בוטים
-        types = list(HOSTS.keys())
-        for i in range(bot_count):
-            h_type = random.choice(types)
+        for _ in range(75):
+            h_type = random.choice(list(HOSTS.keys()))
+            if h_type == "dragon": h_type = "rat" # מאזנים, שלא כולם יהיו דרקונים
             
-            # איזון: סיכוי נמוך לבוסים
-            if HOSTS[h_type]["hp"] > 200 and random.random() > 0.05:
-                h_type = "rat" # רובם חלשים
-
+            # חיפוש מקום פנוי (מנסה 10 פעמים)
+            bx, by = 0, 0
+            for attempt in range(10):
+                bx = random.randint(-15, 15)
+                by = random.randint(-15, 15)
+                if f"{bx},{by}" not in used_spots:
+                    break
+            used_spots.add(f"{bx},{by}")
+            
             bot = {
                 "id": str(uuid.uuid4()),
-                "name": f"{random.choice(BOT_PREFIX)}-{random.randint(10,99)}",
+                "name": random.choice(BOT_NAMES) + f"-{random.randint(10,99)}",
                 "host": h_type,
                 "hp": HOSTS[h_type]["hp"],
                 "max": HOSTS[h_type]["hp"],
-                "x": random.randint(-15, 15),
-                "y": random.randint(-15, 15)
+                "atk": HOSTS[h_type]["atk"],
+                "x": bx, "y": by
             }
-            # מניעת חפיפה עם השחקן בהתחלה
-            if bot["x"]==0 and bot["y"]==0: bot["x"]=5 
-            
             self.state["rivals"].append(bot)
 
-    # === AI System (בוטים נלחמים בכולם) ===
     def process_turn(self):
         if self.state["game_over"]: return
 
         px, py = self.state["x"], self.state["y"]
-        next_rivals = []
+        next_gen_bots = []
         
-        # מילון עזר למיקומים כדי לזהות קרבות בוט-נגד-בוט
-        # מפתח: "x,y", ערך: רשימת בוטים במיקום הזה
-        loc_map = {} 
-
-        # 1. תזוזה של הבוטים
+        # לוגיקה לכל בוט
         for bot in self.state["rivals"]:
-            # בוט מתקרב לשחקן אם הוא קרוב (Hunt)
-            if abs(bot["x"]-px) <= 3 and abs(bot["y"]-py) <= 3:
+            # תזוזה
+            if abs(bot["x"]-px) <= 4 and abs(bot["y"]-py) <= 4: # ציד קרוב
                 dx = 1 if bot["x"] < px else (-1 if bot["x"] > px else 0)
                 dy = 1 if bot["y"] < py else (-1 if bot["y"] > py else 0)
-            else:
-                # תנועה רנדומלית
+            else: # רנדומלי
                 dx = random.choice([-1,0,1])
                 dy = random.choice([-1,0,1])
-            
+                
             bot["x"] = max(-15, min(15, bot["x"] + dx))
             bot["y"] = max(-15, min(15, bot["y"] + dy))
             
-            k = f"{bot['x']},{bot['y']}"
-            if k not in loc_map: loc_map[k] = []
-            loc_map[k].append(bot)
-
-        # 2. עיבוד קרבות
-        # אם יש במיקום של השחקן בוטים -> הם תוקפים את השחקן
-        # אם יש כמה בוטים באותו מיקום -> הם נלחמים ביניהם
-        
-        my_pos = self.pos()
-        
-        for k, bots_in_room in loc_map.items():
+            # בוט תוקף שחקן באותו חדר
+            if bot["x"] == px and bot["y"] == py:
+                dmg = bot["atk"] + random.randint(-2, 2)
+                self.state["hp"] -= max(1, dmg)
+                self.log(f"🩸 {bot['name']} תקף! (-{dmg})", "danger")
             
-            # --- קרב: שחקן נגד בוטים ---
-            if k == my_pos:
-                for bot in bots_in_room:
-                    # בוט תוקף שחקן
-                    dmg = HOSTS[bot["host"]]["atk"] + random.randint(-2,2)
-                    self.state["hp"] -= max(1, dmg)
-                    self.log(f"🩸 {bot['name']} תקף אותך! (-{dmg})", "danger")
-            
-            # --- קרב: בוט נגד בוט (Battle Royale) ---
-            if len(bots_in_room) > 1:
-                # בוט אחד שורד, השאר חוטפים
-                attacker = bots_in_room[0]
-                target = bots_in_room[1]
-                
-                dmg = HOSTS[attacker["host"]]["atk"]
-                target["hp"] -= dmg
-                
-                if target["hp"] <= 0:
-                    # יצירת גופה מהבוט המת
-                    self.state["corpses"][k] = {"type": target["host"], "max": target["max"]}
-                    # בוט מת לא נכנס לרשימה הסופית
-                    continue 
+            next_gen_bots.append(bot)
 
-            # הבוטים ששרדו ממשיכים לסיבוב הבא
-            for b in bots_in_room:
-                if b["hp"] > 0:
-                    next_rivals.append(b)
-
-        self.state["rivals"] = next_rivals
-
-        # 3. בדיקות סוף משחק
+        self.state["rivals"] = next_gen_bots
+        
+        # בדיקות סוף משחק
         if self.state["hp"] <= 0:
             self.state["hp"] = 0
             self.state["game_over"] = True
-            self.state["won_match"] = False
-            self.log("❌ מתת! אתה נפסל מהטורניר.", "critical")
+            self.state["win_status"] = False
+            self.log("❌ מתת! נפסלת.", "critical")
 
         if len(self.state["rivals"]) == 0 and not self.state["game_over"]:
             self.state["game_over"] = True
-            self.state["won_match"] = True
+            self.state["win_status"] = True
             self.state["wins"] += 1
-            self.log("🏆 ניצחון מוחלט! חיסלת את כולם.", "gold")
+            self.log("🏆 ניצחון!", "gold")
 
-    # === שליטת שחקן ===
     def move(self, dx, dy):
         if self.state["game_over"]: return
         
@@ -193,119 +144,118 @@ class Engine:
         self.state["x"] = nx
         self.state["y"] = ny
         
-        if self.pos() not in self.state["visited"]: self.state["visited"].append(self.pos())
+        pos = self.pos_key(nx, ny)
+        if pos not in self.state["visited"]: self.state["visited"].append(pos)
         self.process_turn()
 
-    def attack(self, idx):
+    def attack(self, bot_index):
         if self.state["game_over"]: return
         
-        # מחפש בוטים במיקום שלי
-        room_bots = [b for b in self.state["rivals"] if f"{b['x']},{b['y']}" == self.pos()]
-        if idx >= len(room_bots): return
+        # מחפש בוטים איתי בחדר
+        room_bots = [b for b in self.state["rivals"] if b["x"] == self.state["x"] and b["y"] == self.state["y"]]
+        if bot_index >= len(room_bots): return
         
-        bot = room_bots[idx]
-        dmg = HOSTS[self.state["host"]]["atk"] + random.randint(0, 5)
-        bot["hp"] -= dmg
-        self.log(f"תקפת את {bot['name']} (-{dmg})", "success")
+        target = room_bots[bot_index]
+        my_stats = HOSTS[self.state["host"]]
+        dmg = my_stats["atk"] + random.randint(0, 5)
         
-        if bot["hp"] <= 0:
-            self.log(f"💀 הרגת את {bot['name']}!", "gold")
-            self.state["corpses"][self.pos()] = {"type": bot["host"], "max": HOSTS[bot["host"]]["hp"]}
-            # מחיקה (נעשית בפועל ב-process_turn או כאן ידנית, ה-turn ינקה אותו כי ה-HP <=0)
+        target["hp"] -= dmg
+        self.log(f"תקפת את {target['name']} (-{dmg})", "success")
+        
+        if target["hp"] <= 0:
+            self.log(f"💀 חיסול! גופת {target['host']} נפלה.", "gold")
+            # הופך לגופה
+            self.state["corpses"][f"{target['x']},{target['y']}"] = {
+                "type": target["host"],
+                "max": target["max"]
+            }
+            # מחיקה מהמשחק (על ידי זיהוי ה-ID)
+            self.state["rivals"] = [b for b in self.state["rivals"] if b["id"] != target["id"]]
         
         self.process_turn()
 
-    def swap(self):
+    def swap_body(self):
         if self.state["game_over"]: return
-        pos = self.pos()
+        pos = f"{self.state['x']},{self.state['y']}"
+        if pos not in self.state["corpses"]: return
         
-        if pos in self.state["corpses"]:
-            c_data = self.state["corpses"][pos]
-            
-            # שדרוג!
-            self.state["host"] = c_data["type"]
-            self.state["max_hp"] = HOSTS[c_data["type"]]["hp"]
-            self.state["hp"] = self.state["max_hp"] # ריפוי
-            
-            self.log(f"🧬 לקחת את הגוף של {HOSTS[c_data['type']]['name']}", "gold")
-            del self.state["corpses"][pos]
-            self.process_turn()
+        corpse = self.state["corpses"][pos]
+        self.state["host"] = corpse["type"]
+        self.state["max_hp"] = corpse["max"]
+        self.state["hp"] = corpse["max"] # FULL HEAL
+        
+        del self.state["corpses"][pos]
+        self.log(f"🧬 נכנסת לגוף {HOSTS[self.state['host']]['name']}!", "gold")
+        self.process_turn()
 
     def get_ui(self):
         # מפה רדיוס 4 (9x9)
         grid = []
-        cx, cy = self.state["x"], self.state["y"]
-        radius = 4
+        radius = 4 
+        px, py = self.state["x"], self.state["y"]
         
-        for dy in range(radius, -radius-1, -1):
+        for dy in range(radius, -radius - 1, -1):
             row = []
-            for dx in range(-radius, radius+1):
-                tx, ty = cx+dx, cy+dy
+            for dx in range(-radius, radius + 1):
+                tx, ty = px + dx, py + dy
                 k = f"{tx},{ty}"
-                
-                sym = "⬛"
-                cls = "fog"
+                cell = {"icon": "", "cls": "fog"}
                 
                 # גבולות עולם (15)
                 if tx < -15 or tx > 15 or ty < -15 or ty > 15:
-                    sym = "🧱"
-                    cls = "wall"
-                
-                elif dx==0 and dy==0:
-                    sym = "😎"
-                    cls = "me"
-                elif k in self.state["visited"] or (abs(dx)<=1 and abs(dy)<=1):
-                    # בדיקת תוכן
+                    cell["cls"] = "wall"
+                elif dx == 0 and dy == 0:
+                    cell["icon"] = "😎"
+                    cell["cls"] = "me"
+                elif k in self.state["visited"] or (abs(dx)<=2 and abs(dy)<=2):
                     has_bot = any(b for b in self.state["rivals"] if b["x"]==tx and b["y"]==ty)
                     has_dead = k in self.state["corpses"]
                     
-                    if has_bot: 
-                        sym = "🔴"
-                        cls = "danger"
+                    if has_bot:
+                        cell["icon"] = "🔴"
+                        cell["cls"] = "danger"
                     elif has_dead:
-                        sym = "⚰️"
-                        cls = "loot"
+                        cell["icon"] = "☠️"
+                        cell["cls"] = "loot"
                     else:
-                        sym = "⬜"
-                        cls = "empty"
-                        
-                row.append({"s":sym, "c":cls})
+                        cell["icon"] = "⬜"
+                        cell["cls"] = "floor"
+                row.append(cell)
             grid.append(row)
 
-        # נתוני זירה
+        # נתונים
         room_bots = []
         for i, b in enumerate(self.state["rivals"]):
-            if b["x"] == cx and b["y"] == cy:
+            if b["x"] == px and b["y"] == py:
                 b_info = b.copy()
-                b_info["idx"] = i # אינדקס אמיתי לא בטוח כאן, עדיף להעביר רק לתצוגה
-                # במערכת האמיתית פה נעשה מיפוי פשוט לתצוגה
-                room_bots.append({
-                    "name": b["name"], 
-                    "type": HOSTS[b["host"]]["name"],
-                    "icon": HOSTS[b["host"]]["icon"],
-                    "hp": b["hp"], 
-                    "max": b["max"]
-                })
+                # תרגום שמות לאייקונים לתצוגה
+                meta = HOSTS[b["host"]]
+                b_info["icon"] = meta["icon"]
+                b_info["type_name"] = meta["name"]
+                room_bots.append(b_info)
         
         corpse = None
-        if self.pos() in self.state["corpses"]:
-            ct = self.state["corpses"][self.pos()]["type"]
+        pk = f"{px},{py}"
+        if pk in self.state["corpses"]:
+            ct = self.state["corpses"][pk]["type"]
             corpse = {"name": HOSTS[ct]["name"], "icon": HOSTS[ct]["icon"]}
 
         return {
+            "player": {
+                "name": HOSTS[self.state["host"]]["name"],
+                "icon": HOSTS[self.state["host"]]["icon"],
+                "hp": self.state["hp"], "max": self.state["max_hp"],
+            },
+            "game_state": {
+                "over": self.state["game_over"],
+                "win": self.state["win_status"],
+                "wins_count": self.state["wins"]
+            },
             "map": grid,
             "log": self.state["log"],
             "bots": room_bots,
             "corpse": corpse,
-            "me": {
-                "name": HOSTS[self.state["host"]]["name"],
-                "icon": HOSTS[self.state["host"]]["icon"],
-                "hp": self.state["hp"], "max": self.state["max_hp"]
-            },
-            "total_bots": len(self.state["rivals"]),
-            "win": self.state.get("won_match", False),
-            "dead": self.state.get("game_over", False) and not self.state.get("won_match", False),
-            "wins_count": self.state["wins"]
+            "total_bots": len(self.state["rivals"])
         }
 
 # ==========================================
@@ -314,26 +264,27 @@ class Engine:
 @app.route("/")
 def index():
     if "uid" not in session: session["uid"] = str(uuid.uuid4())
-    return render_template_string(HTML, api=url_for("update"))
+    api = url_for("update")
+    return render_template_string(HTML, api=api)
 
-@app.route("/api", methods=["POST"])
+@app.route("/update", methods=["POST"])
 def update():
-    try: eng = Engine(session.get("war_royale"))
+    try: eng = Engine(session.get("war_royale_stable"))
     except: eng = Engine(None)
     
-    d = request.json
-    a = d.get("a")
-    v = d.get("v")
+    d = request.json or {}
+    act = d.get("a")
+    val = d.get("v")
     
-    if a=="start": eng = Engine(None)
-    elif a=="next": eng.init_match()
-    elif a=="move": eng.move(*v)
-    elif a=="atk": eng.attack(v) # כאן שולחים את המיקום היחסי בחדר (0, 1, 2)
-    # תיקון קטן: המערכת תתקוף את הראשון בחדר תמיד כדי למנוע סנכרון אינדקסים מסובך
-    elif a=="attack_first": eng.attack(0) 
-    elif a=="swap": eng.swap_body()
+    if act=="start": eng = Engine(None)
+    elif act=="next": eng.start_match()
+    elif act=="move": eng.move(*val)
+    elif act=="atk": eng.attack(val)
+    # תיקון התקפה: תוקף תמיד את הראשון ברשימה של החדר (0)
+    elif act=="attack_first": eng.attack(0) 
+    elif act=="swap": eng.swap_body()
     
-    session["war_royale"] = eng.state
+    session["war_royale_stable"] = eng.state
     return jsonify(eng.get_ui())
 
 # ==========================================
@@ -400,7 +351,7 @@ HTML = """
 
 <div id="o-win" class="overlay">
     <h1 style="font-size:60px; color:gold">🏆 המנצח! 🏆</h1>
-    <p>חיסלת את כל 75 הבוטים.</p>
+    <p>חיסלת את כל הבוטים.</p>
     <button class="big-btn" style="background:gold" onclick="api('next')">שלב הבא (+1 נק')</button>
 </div>
 
@@ -418,13 +369,13 @@ HTML = """
             <div style="font-size:12px; color:#f66">HP: <span id="me-hp">0</span></div>
         </div>
     </div>
-    <div class="stat-badge">בוטים נותרו: <span id="cnt" style="color:red; font-size:18px">75</span></div>
+    <div class="stat-badge">בוטים נותרו: <span id="cnt" style="color:red; font-size:18px">...</span></div>
     <div class="stat-badge" style="color:gold">גביעים: <span id="wins">0</span></div>
 </div>
 
 <div class="content">
     <div class="left-col">
-        <small style="color:#0f0; margin-bottom:5px">RADAR (4x Range)</small>
+        <small style="color:#0f0; margin-bottom:5px">RADAR (Zoom: 4x)</small>
         <div class="grid" id="map"></div>
     </div>
     
@@ -465,8 +416,8 @@ HTML = """
             let d = await r.json();
             
             // SCREENS
-            document.getElementById("o-lose").style.display = d.dead ? 'flex' : 'none';
-            document.getElementById("o-win").style.display = d.win ? 'flex' : 'none';
+            document.getElementById("o-lose").style.display = d.game_state.over && !d.game_state.win ? 'flex' : 'none';
+            document.getElementById("o-win").style.display = d.game_state.win ? 'flex' : 'none';
 
             // INFO
             let p = d.player;
@@ -474,18 +425,18 @@ HTML = """
             document.getElementById("me-name").innerText = p.name;
             document.getElementById("me-hp").innerText = p.hp + "/" + p.max;
             document.getElementById("cnt").innerText = d.total_bots;
-            document.getElementById("wins").innerText = d.wins_count;
+            document.getElementById("wins").innerText = d.game_state.wins_count;
 
             // MAP
             let mh="";
             d.map.forEach(row => {
-                row.forEach(c => mh+=`<div class='cell ${c.c}'>${c.s}</div>`);
+                row.forEach(c => mh+=`<div class='cell ${c.cls}'>${c.icon}</div>`);
             });
             let grid = document.getElementById("map");
             grid.innerHTML = mh;
-            // 9x9 grid forced style
-            grid.style.gridTemplateColumns = `repeat(${d.map[0].length}, 1fr)`;
-            grid.style.gridTemplateRows = `repeat(${d.map.length}, 1fr)`;
+            // 9x9 grid forced style (4 radius * 2 + 1)
+            grid.style.gridTemplateColumns = `repeat(9, 1fr)`;
+            grid.style.gridTemplateRows = `repeat(9, 1fr)`;
 
             // STAGE (Enemies)
             let sh = "";
@@ -495,7 +446,7 @@ HTML = """
                     sh += `<div class="card">
                         <div style="font-size:30px;">${b.icon}</div>
                         <div style="font-weight:bold; font-size:12px;">${b.name}</div>
-                        <div style="color:#aaa; font-size:10px;">${b.type}</div>
+                        <div style="color:#aaa; font-size:10px;">${b.type_name}</div>
                         <div style="color:#f55; font-size:12px;">${b.hp} HP</div>
                         <button class="c-btn" style="background:#a22; color:white" onclick="api('attack_first')">⚔️ תקיפה</button>
                     </div>`;
