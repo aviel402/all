@@ -12,9 +12,9 @@ app.secret_key = 'hacker_elite_working_v888'
 
 PROGRAMS = {
     # תקיפה (צבעים חמים)
-    "ping": {"name": "הצפה מהירה (PING)", "cost": 1, "dmg": 10, "risk": 1, "type": "atk"},
-    "brute": {"name": "כוח גס (Brute)", "cost": 3, "dmg": 30, "risk": 4, "type": "atk"},
-    "inject": {"name": "הזרקת קוד (SQL)", "cost": 5, "dmg": 80, "risk": 10, "type": "atk"},
+    "ping": {"name": "הצפה מהירה ", "cost": 1, "dmg": 10, "risk": 1, "type": "atk"},
+    "brute": {"name": "כוח גס", "cost": 3, "dmg": 30, "risk": 4, "type": "atk"},
+    "inject": {"name": "הזרקת קוד ", "cost": 5, "dmg": 80, "risk": 10, "type": "atk"},
     "zero": {"name": "פרצת יום האפס", "cost": 10, "dmg": 300, "risk": 25, "type": "atk"},
     
     # הגנה (צבעים קרים)
@@ -146,7 +146,7 @@ class Engine:
                 self.state["ram"] = self.state["max_ram"]
                 self.log("שדרוג RAM בוצע.")
         elif type == "cpu":
-            cost = 1000
+            cost = 500
             if self.state["money"] >= cost:
                 self.state["money"] -= cost
                 self.state["cpu"] += 1
