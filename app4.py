@@ -9,8 +9,7 @@ app.secret_key = 'hacker_elite_working_v888'
 # ==========================================
 # 💎 נתונים (קבועים ויציבים)
 # ==========================================
-PROGRAMS = {
-    # מתקפה (צבע אדום/כתום)
+
 PROGRAMS = {
     # תקיפה (צבעים חמים)
     "ping": {"name": "הצפה מהירה (PING)", "cost": 1, "dmg": 10, "risk": 1, "type": "atk"},
@@ -21,7 +20,7 @@ PROGRAMS = {
     # הגנה (צבעים קרים)
     "proxy": {"name": "הסוואת IP", "cost": 3, "heal": 15, "type": "def"},
     "clean": {"name": "מחיקת עקבות", "cost": 6, "heal": 40, "type": "def"}
-}}
+}
 
 # הרשימה המלאה והסופית שביקשת
 ALL_TARGETS = [
