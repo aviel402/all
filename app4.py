@@ -4,177 +4,158 @@ import datetime
 from flask import Flask, render_template_string, request, jsonify, session, url_for
 
 app = Flask(__name__)
-# מפתח סודי חדש
-app.secret_key = 'hacker_money_fixed_v12' 
+# מפתח חדש לביטול שמירות ישנות
+app.secret_key = 'cyber_ninja_final_edition_v99'
 
 # ==========================================
-# 🛑 חלק הנתונים
+# 💎 נתונים (קלים וכיפיים)
 # ==========================================
 PROGRAMS = {
-    # תוכנות התקפה
-    "p1": {"name": "מכה קלה", "ram": 2, "dmg": 20, "risk": 4, "type": "atk", "desc": "נזק קטן ומהיר"},
-    "p2": {"name": "הזרקת קוד",  "ram": 4, "dmg": 50, "risk": 8, "type": "atk", "desc": "נזק בינוני"},
-    "p3": {"name": "פריצה מלאה","ram": 8, "dmg": 120,"risk": 20,"type": "atk", "desc": "נזק אדיר!"},
+    # שיפרתי את הנזק והורדתי עלות
+    "kick": {"name": "בעיטת שרת", "cost": 2, "dmg": 30, "risk": 2, "type": "atk", "desc": "נזק מהיר"},
+    "smash": {"name": "פטיש דיגיטלי", "cost": 4, "dmg": 80, "risk": 5, "type": "atk", "desc": "נזק כבד"},
+    "god": {"name": "GOD MODE", "cost": 8, "dmg": 500, "risk": 10, "type": "atk", "desc": "מחיקת שרת מיידית"},
     
-    # תוכנות הגנה
-    "d1": {"name": "הסתר IP",    "ram": 2, "heal": 10, "type": "def", "desc": "-10% מעקב"},
-    "d2": {"name": "נקה לוגים",   "ram": 5, "heal": 25, "type": "def", "desc": "-25% מעקב"}
+    # תוכנות הגנה חזקות
+    "ghost": {"name": "רוח רפאים", "cost": 2, "heal": 20, "type": "def", "desc": "-20% סיכון"},
+    "wipe": {"name": "פורמט לוגים", "cost": 5, "heal": 50, "type": "def", "desc": "-50% סיכון!"}
 }
 
-TARGETS = [
-    # הכפלתי את כל הסכומים ב-10 לפי הבקשה שלך
-    {"name": "ראוטר של שכן", "def": 10, "cash": 150},
-    {"name": "בית קפה", "def": 20, "cash": 250},
-    {"name": "פיצרייה מקומית", "def": 30, "cash": 400},
-    {"name": "כספומט שכונתי", "def": 50, "cash": 800},
-    {"name": "מערכת ניהול חנות", "def": 80, "cash": 1200},
-    {"name": "מחשב של מנהל בנק", "def": 120, "cash": 2000},
-    {"name": "רשת בית ספר", "def": 150, "cash": 2500},
-    {"name": "חברת שליחויות", "def": 180, "cash": 3000},
-    {"name": "רשת שיווק", "def": 250, "cash": 5000},
-    {"name": "חברת ביטוח", "def": 300, "cash": 7000},
-    {"name": "בנק דיגיטלי", "def": 400, "cash": 10000},
-    {"name": "מלונות דן", "def": 500, "cash": 15000},
-    {"name": "רכבת ישראל", "def": 700, "cash": 22000},
-    {"name": "חברת אשראי", "def": 900, "cash": 30000},
-    {"name": "משרד החינוך", "def": 1200, "cash": 40000},
-    {"name": "תחנת כוח", "def": 1500, "cash": 55000},
-    {"name": "מטה המשטרה", "def": 2000, "cash": 80000},
-    {"name": "מגדל פיקוח", "def": 2500, "cash": 110000},
-    {"name": "לוויין ריגול", "def": 3500, "cash": 150000},
-    {"name": "המוסד", "def": 5000, "cash": 250000},
-    {"name": "מחשבי הבורסה", "def": 7500, "cash": 500000},
-    {"name": "בנק מרכזי", "def": 10000, "cash": 800000},
-    {"name": "הפנטגון", "def": 15000, "cash": 1500000},
-    {"name": "SpaceX Mainframe", "def": 25000, "cash": 3000000}
+TARGETS_DB = [
+    {"name": "Wi-Fi ציבורי", "hp": 20, "cash": 500},
+    {"name": "מחשב גיימינג", "hp": 50, "cash": 1200},
+    {"name": "כספומט", "hp": 100, "cash": 5000},
+    {"name": "בנק אוף אמריקה", "hp": 500, "cash": 25000},
+    {"name": "הבית הלבן", "hp": 2000, "cash": 100000},
+    {"name": "אזור 51", "hp": 10000, "cash": 1000000}
 ]
 
 # ==========================================
-# ⚙️ מנוע
+# ⚙️ מנוע משחק קליל
 # ==========================================
-class GameEngine:
+class Engine:
     def __init__(self, state=None):
         if not state:
             self.reset()
         else:
             self.state = state
 
-    def getTime(self):
-        return datetime.datetime.now().strftime("%H:%M:%S")
+    def log(self, txt, type="info"):
+        self.state["log"].insert(0, {"text": txt, "type": type})
+        if len(self.state["log"]) > 15: self.state["log"].pop()
 
     def reset(self):
         self.state = {
             "money": 0,
-            "ram": 15, "max_ram": 15, # יותר RAM
+            "ram": 20, "max_ram": 20, # מתחילים עם המון RAM
             "cpu": 1,
-            "trace": 0,
-            "active_target": None, 
-            "targets_list": [],
+            "risk": 0,
+            "target": None,
+            "list": [],
             "game_over": False,
-            "log": [{"time": self.getTime(), "txt": "מערכת הופעלה.", "c": "sys"}]
+            "log": [{"text": "מערכת מוכנה. בהצלחה.", "type": "sys"}]
         }
-        self.load_all_targets()
+        self.fill_list()
 
-    def log(self, txt, c="info"):
-        self.state["log"].insert(0, {"time": self.getTime(), "txt": txt, "c": c})
-        if len(self.state["log"]) > 30: self.state["log"].pop()
+    def fill_list(self):
+        self.state["list"] = []
+        for t in TARGETS_DB:
+            # מעתיקים ויוצרים מזהה
+            new_t = t.copy()
+            new_t["id"] = str(uuid.uuid4())
+            new_t["max_hp"] = t["hp"]
+            self.state["list"].append(new_t)
 
-    def load_all_targets(self):
-        # טוען את כולם מיד, לא רק 5
-        self.state["targets_list"] = []
-        for t in TARGETS:
-            base = t.copy()
-            base["max_def"] = int(base["def"] * random.uniform(0.9, 1.1))
-            base["def"] = base["max_def"]
-            base["id"] = str(uuid.uuid4())
-            self.state["targets_list"].append(base)
+    # --- Actions ---
 
     def connect(self, t_id):
-        if self.state["active_target"]: return
-        t = next((i for i in self.state["targets_list"] if i["id"] == t_id), None)
+        t = next((x for x in self.state["list"] if x["id"] == t_id), None)
         if t:
-            self.state["active_target"] = t
-            self.log(f"התחברות ל: {t['name']}", "sys")
+            self.state["target"] = t
+            self.log(f"התחברת ל-{t['name']}", "sys")
 
     def disconnect(self):
-        if not self.state["active_target"]: return
-        self.state["active_target"] = None
-        self.state["ram"] = self.state["max_ram"] 
-        self.log("התנתקת. RAM שוחזר.", "def")
+        self.state["target"] = None
+        self.state["ram"] = self.state["max_ram"]
+        self.log("התנתקת. RAM התמלא.", "sys")
 
-    def execute(self, pid):
+    def execute(self, key):
         if self.state["game_over"]: return
-        prog = PROGRAMS[pid]
         
-        if self.state["ram"] < prog["ram"]:
-            self.log("אין מספיק RAM! התנתק כדי למלא.", "err")
+        prog = PROGRAMS[key]
+        if self.state["ram"] < prog["cost"]:
+            self.log("חסר RAM! תתנתק רגע.", "err")
             return
 
-        self.state["ram"] -= prog["ram"]
+        self.state["ram"] -= prog["cost"]
         
-        # תקיפה
         if prog["type"] == "atk":
-            tgt = self.state["active_target"]
-            if not tgt: return
+            t = self.state["target"]
+            if not t: return # הגנה
             
             dmg = prog["dmg"] * self.state["cpu"]
-            tgt["def"] -= dmg
-            self.state["trace"] = min(100, self.state["trace"] + prog["risk"])
+            t["hp"] -= dmg
             
-            self.log(f"{prog['name']} פגע (-{dmg})", "hack")
+            self.state["risk"] += prog["risk"] # עולה לאט
             
-            # בדיקת ניצחון בפריצה
-            if tgt["def"] <= 0:
-                amount = tgt["cash"]
-                self.state["money"] += amount
-                self.log(f"💰 הצלחה! לקחת ₪{amount}", "win")
-                self.state["targets_list"].remove(tgt)
-                self.state["active_target"] = None
-                self.state["ram"] = self.state["max_ram"] # בונוס מילוי RAM
+            self.log(f"התקפה מוצלחת! -{dmg} לשרת.", "atk")
+            
+            if t["hp"] <= 0:
+                reward = t["cash"]
+                self.state["money"] += reward
+                self.log(f"👑 שרת נפל! הרווחת ${reward}", "win")
+                self.state["list"].remove(t)
+                self.state["target"] = None
+                self.state["ram"] = self.state["max_ram"] # פרס
                 
-        # הגנה
+                if len(self.state["list"]) == 0:
+                    self.fill_list() # מביא חדשים
+
         elif prog["type"] == "def":
             heal = prog["heal"] * self.state["cpu"]
-            self.state["trace"] = max(0, self.state["trace"] - heal)
-            self.log(f"הורדת סיכון ב-{heal}%", "def")
+            self.state["risk"] = max(0, self.state["risk"] - heal)
+            self.log("הורדת פרופיל. סיכון ירד.", "def")
 
-        # הפסד
-        if self.state["trace"] >= 100:
+        # בדיקת הפסד (רק ב-100 עגול)
+        if self.state["risk"] >= 100:
             self.state["game_over"] = True
-            self.state["active_target"] = None
 
-    def buy(self, item):
+    def buy(self, type):
+        if self.state["game_over"]: return
+        
         cost = 0
-        if item == "ram":
-            cost = self.state["max_ram"] * 10
+        if type == "ram":
+            cost = 100 * (self.state["max_ram"] // 5)
             if self.state["money"] >= cost:
                 self.state["money"] -= cost
-                self.state["max_ram"] += 3
+                self.state["max_ram"] += 10 # קונים המון בבת אחת
                 self.state["ram"] = self.state["max_ram"]
-                self.log(f"RAM שודרג ל-{self.state['max_ram']}GB", "win")
+                self.log("שדרוג RAM בוצע.", "win")
             else:
                 self.log(f"חסר כסף ({cost})", "err")
-        elif item == "cpu":
-            cost = self.state["cpu"] * 250
+                
+        elif type == "cpu":
+            cost = 500 * self.state["cpu"]
             if self.state["money"] >= cost:
                 self.state["money"] -= cost
                 self.state["cpu"] += 1
-                self.log(f"CPU שודרג לרמה {self.state['cpu']}", "win")
+                self.log("שדרוג מעבד בוצע.", "win")
             else:
                 self.log(f"חסר כסף ({cost})", "err")
 
 # ==========================================
-# SERVER ROUTING
+# SERVER
 # ==========================================
 @app.route("/")
-def index():
+def home():
     if "uid" not in session: session["uid"] = str(uuid.uuid4())
-    return render_template_string(HTML, api=url_for("handle_post"))
+    api = url_for("update")
+    return render_template_string(HTML, api=api)
 
-@app.route("/api", methods=["POST"])
-def handle_post():
-    try: eng = GameEngine(session.get("redcode_final"))
-    except: eng = GameEngine(None)
+@app.route("/update", methods=["POST"])
+def update():
+    try: eng = Engine(session.get("ninja_game"))
+    except: eng = Engine(None)
     
     d = request.json
     a = d.get("a")
@@ -183,228 +164,284 @@ def handle_post():
     if a == "reset": eng.reset()
     elif a == "conn": eng.connect(v)
     elif a == "disc": eng.disconnect()
-    elif a == "exec": eng.execute(v)
+    elif a == "run": eng.execute(v)
     elif a == "buy": eng.buy(v)
     
-    session["redcode_final"] = eng.state
+    session["ninja_game"] = eng.state
     
-    return jsonify({"s": eng.state, "progs": PROGRAMS})
+    return jsonify({
+        "s": eng.state, 
+        "progs": PROGRAMS
+    })
 
 # ==========================================
-# UI HTML (Red Matrix Style Fixes)
+# CLIENT UI (CyberWave)
 # ==========================================
 HTML = """
 <!DOCTYPE html>
 <html lang="he" dir="rtl">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>RedCode</title>
-<link href="                                                       ;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CYBER NINJA</title>
+<link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@400;700&display=swap" rel="stylesheet">
 <style>
-    /* RESET */
+    /* CSS STYLE */
     * { box-sizing: border-box; }
     
+    :root {
+        --bg: #0d0221;
+        --card: #19053d;
+        --neon-p: #a239ea; /* Purple */
+        --neon-b: #5bc0eb; /* Blue */
+        --neon-y: #fde24f; /* Yellow */
+        --text: #e0fbfc;
+    }
+    
     body {
-        background: #000; color: #f00; font-family: 'Rubik', sans-serif;
-        margin: 0; height: 100vh; display: flex; flex-direction: column; overflow: hidden;
-    }
-    
-    /* CRT Lines */
-    body::before { 
-        content:""; position:absolute; top:0; left:0; width:100%; height:100%; 
-        background: repeating-linear-gradient(0deg, rgba(255,0,0,0.03), rgba(255,0,0,0.03) 1px, transparent 1px, transparent 2px); 
-        pointer-events: none; z-index:9; 
+        background: var(--bg);
+        background: linear-gradient(135deg, #0d0221 0%, #260c45 100%);
+        color: var(--text);
+        font-family: 'Exo 2', sans-serif;
+        margin: 0; height: 100vh;
+        display: flex; flex-direction: column; overflow: hidden;
     }
 
-    /* HEADER */
-    .top { height: 60px; background: #080000; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; border-bottom: 2px solid #f00; z-index:10;}
-    .title { font-family: 'Share Tech Mono'; font-size: 26px; text-shadow: 0 0 8px red;}
-    .money { font-size: 22px; color: gold;}
-
-    /* GRID LAYOUT */
-    .grid { flex: 1; display: grid; grid-template-columns: 260px 1fr 300px; gap: 5px; padding: 5px; overflow:hidden;}
-    
-    .panel { background: rgba(20, 0, 0, 0.95); border: 1px solid #900; display:flex; flex-direction:column; padding:10px; overflow:hidden;}
-    .head { border-bottom:1px solid #500; padding-bottom:5px; text-align:center; font-family:'Share Tech Mono'; color:#a55; margin-bottom:10px;}
-
-    /* BARS */
-    .bar-row { margin-bottom: 10px; }
-    .label { display:flex; justify-content:space-between; font-size:12px; margin-bottom:3px; color:#888;}
-    .track { width:100%; height:14px; background:#100; border:1px solid #500; direction:ltr;}
-    .fill { height:100%; width:0%; transition: width 0.2s; background:#f00; box-shadow:0 0 5px red;}
-    .trace-c { background:#fff; }
-
-    /* TARGET LIST */
-    .list-area { overflow-y: auto; flex:1; padding-right:5px;}
-    /* SCROLLBAR */
-    ::-webkit-scrollbar { width:6px; }
-    ::-webkit-scrollbar-track { background:#100; }
-    ::-webkit-scrollbar-thumb { background:#600; border-radius:3px; }
-
-    .item { 
-        padding: 10px; margin-bottom: 5px; border: 1px dashed #500; 
-        background:#050000; cursor:pointer; display:flex; justify-content:space-between; align-items:center;
+    /* Header */
+    .top-bar {
+        background: rgba(0,0,0,0.3); padding: 10px 20px;
+        display: flex; justify-content: space-between; align-items: center;
+        border-bottom: 2px solid var(--neon-p);
+        box-shadow: 0 0 15px var(--neon-p);
     }
-    .item:hover { background: #200; border-color: #f00; }
-    .iname { font-weight:bold; font-size:14px;}
-    .isub { font-size:11px; color:#a66; }
-
-    /* HACK AREA */
-    .active-ui { display:none; flex-direction:column; height:100%; }
-    
-    .hack-info { background:#200; padding:10px; border:1px solid #f00; margin-bottom:10px; border-radius:4px; text-align:center;}
-    
-    .deck { display:grid; grid-template-columns:1fr 1fr; gap:8px; overflow-y:auto;}
-    
-    /* התיקון הגדול לכפתורים */
-    .prog { 
-        padding:15px; border:1px solid #500; background:#100; color:#faa; 
-        cursor:pointer; font-weight:bold; font-size:14px; display:block; width:100%;
-        font-family: inherit; margin:0; /* מחיקת ריווח ברירת מחדל */
+    .money-badge {
+        font-size: 24px; color: var(--neon-y); font-weight: bold;
+        text-shadow: 0 0 10px rgba(253, 226, 79, 0.5);
     }
-    .prog:hover:not(:disabled) { background:#400; border-color:#f00; color:#fff;}
-    .prog:disabled { opacity:0.3; cursor:not-allowed; background:black;}
+
+    /* Layout */
+    .content {
+        flex: 1; display: grid; grid-template-columns: 250px 1fr 300px;
+        gap: 15px; padding: 15px; overflow: hidden;
+    }
     
-    /* TERMINAL */
-    .logs { flex:1; overflow-y:auto; font-family:'Courier New'; font-size:13px; color:#ccc;}
-    .ln { margin-bottom:3px; border-bottom:1px solid #200; padding-bottom:2px;}
-    .tm { font-size:10px; color:#555; margin-left:5px;}
-    .win { color:#0f0; } .err { background:#500; color:white; } .hack{color:#fe0} .def{color:#0ef}
+    .panel {
+        background: var(--card); border-radius: 12px;
+        border: 1px solid rgba(162, 57, 234, 0.3);
+        display: flex; flex-direction: column; padding: 15px;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+    }
+    
+    h3 { margin: 0 0 10px 0; color: var(--neon-b); text-align: center; border-bottom: 1px dashed var(--neon-b); padding-bottom: 5px; }
 
-    /* MODAL */
-    .modal { position:fixed; inset:0; background:rgba(0,0,0,0.95); display:none; flex-direction:column; justify-content:center; align-items:center; z-index:99; color:red;}
-    .btn-res { padding:15px 30px; font-size:20px; background:red; border:none; cursor:pointer; font-weight:bold; margin-top:20px;}
+    /* Bars */
+    .meter { height: 10px; background: #000; border-radius: 5px; overflow: hidden; margin-bottom: 5px;}
+    .fill { height: 100%; transition: width 0.3s ease; }
+    
+    .label { display: flex; justify-content: space-between; font-size: 14px; margin-bottom: 3px; }
 
-    @media(max-width:800px) { .grid{ grid-template-columns:1fr; grid-template-rows: auto 1fr auto; } }
+    /* Terminal */
+    .terminal-box { 
+        flex: 1; overflow-y: auto; background: rgba(0,0,0,0.4); 
+        border-radius: 8px; padding: 10px; font-family: monospace; font-size: 13px; 
+    }
+    .msg { margin-bottom: 4px; border-left: 3px solid transparent; padding-left: 5px; }
+    .msg.sys { border-color: #aaa; color: #ccc; }
+    .msg.err { border-color: red; background: rgba(255,0,0,0.1); color: #faa; }
+    .msg.win { border-color: gold; color: gold; font-weight: bold; }
+    .msg.atk { border-color: var(--neon-p); color: #d0f; }
+
+    /* Buttons */
+    .shop-btn {
+        width: 100%; padding: 10px; margin-top: 5px; background: rgba(255,255,255,0.05);
+        border: 1px solid var(--neon-b); color: var(--neon-b); border-radius: 6px; cursor: pointer;
+    }
+    .shop-btn:hover { background: var(--neon-b); color: #000; }
+
+    /* Targets List */
+    .scroll-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+    
+    .card {
+        background: rgba(0,0,0,0.2); border: 1px solid #444; border-radius: 8px;
+        padding: 10px; cursor: pointer; transition: 0.2s; display: flex; justify-content: space-between; align-items: center;
+    }
+    .card:hover { border-color: var(--neon-y); transform: scale(1.02); background: rgba(255,255,255,0.05); }
+    .t-title { font-weight: bold; font-size: 15px; }
+    .t-sub { font-size: 12px; color: #aaa; }
+
+    /* Hack UI */
+    .hack-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; flex: 1; overflow-y: auto; }
+    .skill-btn {
+        padding: 15px; border: none; border-radius: 8px; cursor: pointer;
+        color: white; font-weight: bold; display: flex; flex-direction: column; align-items: center; justify-content: center;
+        transition: 0.1s;
+    }
+    .skill-btn:disabled { opacity: 0.3; cursor: not-allowed; filter: grayscale(1); }
+    .skill-btn:active { transform: scale(0.95); }
+    
+    .btn-atk { background: linear-gradient(135deg, #a239ea, #5900b3); box-shadow: 0 4px 0 #3a0075;}
+    .btn-def { background: linear-gradient(135deg, #00b4db, #0083b0); box-shadow: 0 4px 0 #005f80;}
+    .btn-exit { background: #d00; color: white; border: none; padding: 10px; width: 100%; border-radius: 6px; cursor: pointer; font-weight:bold; margin-bottom: 10px;}
+
+    /* Game Over */
+    .modal {
+        position: fixed; inset: 0; background: rgba(0,0,0,0.95); z-index: 99;
+        display: none; align-items: center; justify-content: center; flex-direction: column;
+    }
+    .game-over-txt { font-size: 60px; color: #f06; text-shadow: 0 0 20px #f06; animation: float 3s infinite;}
+    
+    @keyframes float { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-10px)}}
+    
+    @media(max-width:800px) { .content { grid-template-columns: 1fr; grid-template-rows: auto 200px auto; }}
 </style>
 </head>
 <body>
 
-<div id="scr-over" class="modal">
-    <h1 style="font-size:60px">נלכדת!</h1>
-    <p>המשטרה בדרך. פרטי החשבון נחשפו.</p>
-    <button class="btn-res" onclick="api('reset')">התחל מחדש</button>
+<div id="end-screen" class="modal">
+    <div class="game-over-txt">GAME OVER</div>
+    <p>נתפסת על חם.</p>
+    <button onclick="api('reset')" style="font-size:24px; padding:10px 40px; background:#f06; border:none; color:white; border-radius:10px; cursor:pointer;">נסה שוב</button>
 </div>
 
-<div class="top">
-    <div class="brand">REDCODE 2.0</div>
-    <div class="cash">₪<span id="v-cash">0</span></div>
+<div class="top-bar">
+    <div style="font-weight:900; font-size:20px; letter-spacing:1px;">CYBER NINJA <span style="font-size:12px; font-weight:normal; opacity:0.6">v2088</span></div>
+    <div class="money-badge">$<span id="ui-money">0</span></div>
 </div>
 
-<div class="grid">
-    <!-- LEFT STATS -->
+<div class="content">
+    
+    <!-- LEFT: Stats & Shop -->
     <div class="panel">
-        <div class="head">SYSTEM</div>
-        <div class="bar-row">
-            <div class="lbl"><span>סיכון</span><span id="t-trc">0%</span></div>
-            <div class="track"><div class="fill trace-c" id="b-trc" style="background:#fff"></div></div>
+        <h3>מצב מערכת</h3>
+        
+        <div style="margin-bottom:15px">
+            <div class="label"><span>⚠️ סיכון</span><span id="txt-risk">0%</span></div>
+            <div class="meter"><div class="fill" id="bar-risk" style="background:#ff2a6d; width:0%"></div></div>
         </div>
-        <div class="bar-row">
-            <div class="lbl"><span>זיכרון</span><span id="t-ram">15/15</span></div>
-            <div class="track"><div class="fill" id="b-ram"></div></div>
+        
+        <div style="margin-bottom:15px">
+            <div class="label"><span>🔋 RAM</span><span id="txt-ram">20/20</span></div>
+            <div class="meter"><div class="fill" id="bar-ram" style="background:#05d9e8; width:100%"></div></div>
         </div>
-        <div style="margin-top:auto; display:flex; gap:5px;">
-            <button class="prog" onclick="api('buy','ram')" style="font-size:11px;">+RAM</button>
-            <button class="prog" onclick="api('buy','cpu')" style="font-size:11px;">+CPU</button>
+        
+        <div style="text-align:center; font-size:14px; margin-bottom:10px; color:#ccc;">
+            מעבד רמה <span id="ui-cpu" style="color:#fff; font-weight:bold;">1</span>
+        </div>
+
+        <div style="margin-top:auto">
+            <button class="shop-btn" onclick="api('buy','ram')">+RAM</button>
+            <button class="shop-btn" onclick="api('buy','cpu')">+CPU</button>
         </div>
     </div>
 
-    <!-- MIDDLE LOGS -->
+    <!-- CENTER: Terminal -->
     <div class="panel">
-        <div class="head">TERMINAL</div>
-        <div id="logs" class="logs"></div>
+        <h3>יומן פעולות</h3>
+        <div class="terminal-box" id="log-box"></div>
     </div>
 
-    <!-- RIGHT TARGETS -->
+    <!-- RIGHT: Gameplay -->
     <div class="panel">
-        <div class="head">NETWORK</div>
+        <h3>רשת יעדים</h3>
         
-        <!-- List Mode -->
-        <div id="mode-list" class="list-area"></div>
+        <!-- List -->
+        <div id="view-list" class="scroll-list"></div>
         
-        <!-- Hack Mode -->
-        <div id="mode-hack" class="active-ui">
-            <div class="hack-info">
-                <h3 id="tg-name" style="margin:0; color:#fa0">...</h3>
-                <div class="track" style="height:5px; margin-top:5px; border-color:#fa0"><div id="b-fw" class="fill" style="background:#fa0; width:100%"></div></div>
-                <div style="font-size:10px; margin-top:5px;">
-                    <span onclick="api('disc')" style="color:red; cursor:pointer; text-decoration:underline;">[ התנתקות חירום ]</span>
-                </div>
+        <!-- Hack -->
+        <div id="view-hack" style="display:none; height:100%; flex-direction:column;">
+            <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+                <span id="t-name" style="font-weight:bold; color:var(--neon-y)">TARGET</span>
+                <span id="t-hp" style="font-size:12px">100/100</span>
             </div>
             
-            <div class="deck" id="prog-grid"></div>
+            <div class="meter" style="border:1px solid var(--neon-y); margin-bottom:15px;">
+                <div class="fill" id="bar-hp" style="background:var(--neon-y); width:100%"></div>
+            </div>
+            
+            <button class="btn-exit" onclick="api('disc')">🔌 התנתק לחידוש RAM</button>
+            
+            <div class="hack-controls" id="prog-btns"></div>
         </div>
     </div>
+
 </div>
 
 <script>
     const API = "{{ api }}";
-    window.onload = ()=> api('init');
+    
+    // Auto start
+    window.onload = ()=> api('reset'); // Start fresh
 
-    async function api(a, v=null){
-        try{
-            let res = await fetch(API, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({a:a, v:v})});
+    async function api(act, val=null) {
+        try {
+            let res = await fetch(API, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({a:act, v:val})});
             let d = await res.json();
             
-            if(d.s.game_over) document.getElementById("scr-over").style.display="flex";
-            else document.getElementById("scr-over").style.display="none";
+            if(d.s.game_over) document.getElementById("end-screen").style.display="flex";
+            else document.getElementById("end-screen").style.display="none";
 
             render(d.s, d.progs);
         } catch(e) { console.error(e); }
     }
 
     function render(s, progs) {
-        document.getElementById("v-cash").innerText = s.money;
+        // Values
+        document.getElementById("ui-money").innerText = s.money.toLocaleString();
+        document.getElementById("ui-cpu").innerText = s.cpu;
+        document.getElementById("txt-risk").innerText = s.risk + "%";
+        document.getElementById("bar-risk").style.width = s.risk + "%";
         
-        document.getElementById("t-trc").innerText = s.trace+"%";
-        document.getElementById("b-trc").style.width = s.trace+"%";
-        
-        document.getElementById("t-ram").innerText = s.ram + "/" + s.max_ram;
-        document.getElementById("b-ram").style.width = (s.ram/s.max_ram)*100+"%";
+        document.getElementById("txt-ram").innerText = s.ram + " / " + s.max_ram;
+        document.getElementById("bar-ram").style.width = (s.ram/s.max_ram)*100 + "%";
 
         // Log
-        let lbox = document.getElementById("logs");
-        lbox.innerHTML = "";
-        s.log.forEach(l => lbox.innerHTML += `<div class="ln ${l.c}"><span class="tm">${l.time}</span> ${l.txt}</div>`);
+        let lb = document.getElementById("log-box");
+        lb.innerHTML = "";
+        s.log.forEach(l => {
+            lb.innerHTML += `<div class="msg ${l.type}">> ${l.text}</div>`;
+        });
 
-        if(s.active_target) {
-            document.getElementById("mode-list").style.display="none";
-            document.getElementById("mode-hack").style.display="flex";
+        // Views
+        if(s.target) {
+            document.getElementById("view-list").style.display="none";
+            document.getElementById("view-hack").style.display="flex";
             
-            let t = s.active_target;
-            document.getElementById("tg-name").innerText = t.name;
-            let hp = (t.def/t.max_def)*100;
-            document.getElementById("b-fw").style.width = hp + "%";
+            let t = s.target;
+            document.getElementById("t-name").innerText = t.name;
+            let hp = (t.hp / t.max_hp) * 100;
+            document.getElementById("bar-hp").style.width = hp + "%";
+            document.getElementById("t-hp").innerText = t.hp;
             
-            let html = "";
+            let h="";
             for(let k in progs) {
                 let p = progs[k];
-                // אם אין ראם, כפתור מנוטרל
-                let dis = s.ram < p.ram ? "disabled" : "";
+                let dis = s.ram < p.cost ? "disabled" : "";
+                let cls = p.type=="atk" ? "btn-atk" : "btn-def";
                 
-                html += `<button class="prog" ${dis} onclick="api('exec','${k}')">
-                    ${p.name}<br>
-                    <small style="color:#777">${p.desc}</small>
+                h += `<button class="skill-btn ${cls}" ${dis} onclick="api('run','${k}')">
+                    <span>${p.name}</span>
+                    <small style="opacity:0.8">${p.desc}</small>
+                    <small style="color:yellow; margin-top:5px">-${p.cost} RAM</small>
                 </button>`;
             }
-            document.getElementById("prog-grid").innerHTML = html;
+            document.getElementById("prog-btns").innerHTML = h;
             
         } else {
-            document.getElementById("mode-list").style.display="block";
-            document.getElementById("mode-hack").style.display="none";
+            document.getElementById("view-list").style.display="flex";
+            document.getElementById("view-hack").style.display="none";
             
-            let html = "";
-            s.targets_list.forEach(t => {
-                html += `<div class="item" onclick="api('conn','${t.id}')">
+            let h="";
+            if(s.list.length == 0) h = "<div style='text-align:center; padding:20px'>מערכת מחפשת יעדים חדשים...</div>";
+            
+            s.list.forEach(t => {
+                h += `<div class="card" onclick="api('conn','${t.id}')">
                     <div>
-                        <div class="iname">${t.name}</div>
-                        <div class="isub">הגנה: ${t.max_def} | ₪${t.cash}</div>
+                        <div class="t-title">${t.name}</div>
+                        <div class="t-sub">HP: ${t.hp} | שווי: $${t.cash}</div>
                     </div>
-                    <div>></div>
+                    <div style="font-size:20px; color:var(--neon-b)">➔</div>
                 </div>`;
             });
-            document.getElementById("mode-list").innerHTML = html;
+            document.getElementById("view-list").innerHTML = h;
         }
     }
 </script>
