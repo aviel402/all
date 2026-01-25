@@ -35,7 +35,7 @@ class Engine:
                 "hp": 20, "max_hp": 20,
                 "is_dead": False,
                 # נתוני זירה
-                "map_size": 7, # רדיוס 5 = מפה 10x10 (-5 עד 5)
+                "map_size": 10, # רדיוס 5 = מפה 10x10 (-5 עד 5)
                 "rivals": [], 
                 "map_content": {}, # מפלצות וגופות בחדרים
                 "visited": ["0,0"],
@@ -141,7 +141,7 @@ class Engine:
                     dx, dy = 0, 0
                     dist = abs(bot["x"] - px) + abs(bot["y"] - py)
                     
-                    if dist <= 3 and not self.state["is_dead"]: # ציד
+                    if dist <= 2 and not self.state["is_dead"]: # ציד
                         dx = 1 if bot["x"] < px else (-1 if bot["x"] > px else 0)
                         dy = 1 if bot["y"] < py else (-1 if bot["y"] > py else 0)
                     else: # שוטטות
@@ -149,8 +149,8 @@ class Engine:
                         dy = random.choice([-1, 0, 1])
                     
                     # וידוא גבולות מפה 5+-
-                    bot["x"] = max(-5, min(5, bot["x"] + dx))
-                    bot["y"] = max(-5, min(5, bot["y"] + dy))
+                    bot["x"] = max(-10, min(10, bot["x"] + dx))
+                    bot["y"] = max(-10, min(10, bot["y"] + dy))
 
         # 2. מפלצות חיות בחדר שלי תוקפות
         my_room_mon = self.state["map_content"].get(pos_key)
@@ -177,7 +177,7 @@ class Engine:
         ny = self.state["y"] + dy
         
         # גבולות מפה (קירות)
-        if nx < -5 or nx > 5 or ny < -5 or ny > 5:
+        if nx < -10 or nx > 10 or ny < -10 or ny > 10:
             self.log("🚧 הגעת לקיר החיצוני של הזירה.", "sys")
             return
 
@@ -279,10 +279,10 @@ class Engine:
                 cell = {"txt":"⬛", "cls":"fog"}
                 
                 # גבולות מפה
-                if tx < -5 or tx > 5 or ty < -5 or ty > 5:
+                if tx < -10 or tx > 10 or ty < -10 or ty > 10:
                     cell = {"txt":"🚫", "cls":"wall"}
                 elif dx==0 and dy==0:
-                    cell = {"txt": "😊", "cls":"me"} # שחקן
+                    cell = {"txt": "🫡", "cls":"me"} # שחקן
                 elif k in self.state["visited"] or (abs(dx)<=1 and abs(dy)<=1):
                     # תוכן תא
                     cont = self.state["map_content"].get(k)
