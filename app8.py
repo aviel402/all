@@ -52,7 +52,7 @@ class Engine:
     def init_arena(self):
         # יצירת 4 בוטים יריבים מפוזרים
         names = ["נמסיס", "אלפא", "אומגה", "צללית"]
-        for i in range(9)
+        for i in range(9):
             for n in names:
                 bot = {
                     "name": n+f'{i}',
