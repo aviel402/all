@@ -754,31 +754,31 @@ HTML = """
 <body>
 
 <div id="victory" class="victory-screen">
-    <div class="victory-title">🏆 VICTORY! 🏆</div>
+    <div class="victory-title">🏆 ניצחון! 🏆</div>
     <div style="color:#0ff; font-size:24px;">כל היריבים הושמדו</div>
     <button class="victory-btn" onclick="send('reset')">משחק חדש</button>
 </div>
 
 <div class="stats-panel">
-    <div class="stats-title">📊 STATISTICS</div>
+    <div class="stats-title">📊 סטטיסטיקות</div>
     <div class="stat-line">
-        <span class="stat-label">Kills</span>
+        <span class="stat-label">חיסולים</span>
         <span class="stat-num" id="stat-kills">0</span>
     </div>
     <div class="stat-line">
-        <span class="stat-label">Possessed</span>
+        <span class="stat-label">גופים</span>
         <span class="stat-num" id="stat-poss">0</span>
     </div>
     <div class="stat-line">
-        <span class="stat-label">Time</span>
+        <span class="stat-label">זמן</span>
         <span class="stat-num" id="stat-time">0s</span>
     </div>
     <div class="stat-line">
-        <span class="stat-label">Turns</span>
+        <span class="stat-label">תורות</span>
         <span class="stat-num" id="stat-turns">0</span>
     </div>
     <div class="stat-line">
-        <span class="stat-label">Explored</span>
+        <span class="stat-label">נחקר</span>
         <span class="stat-num" id="stat-explored">0</span>
     </div>
 </div>
@@ -803,11 +803,11 @@ HTML = """
 
 <div class="content">
     <div class="radar-section">
-        <div class="radar-title">⚡ R.A.D.A.R ⚡</div>
+        <div class="radar-title">⚡ מכ״ם ⚡</div>
         <div class="radar-grid" id="map"></div>
     </div>
     <div class="scene-section">
-        <div class="scene-title">🔍 SCENE ANALYSIS</div>
+        <div class="scene-title">🔍 ניתוח זירה</div>
         <div class="scene-grid" id="scene"></div>
     </div>
 </div>
@@ -818,11 +818,11 @@ HTML = """
     <button class="reset-btn" onclick="send('reset')">🔄 RESET</button>
     <div class="dpad">
         <button class="move-btn u" onclick="send('move',[0,1])">⬆</button>
-        <button class="move-btn l" onclick="send('move',[-1,0])">⬅</button>
+        <button class="move-btn l" onclick="send('move',[1,0])">⬅</button>
         <button class="move-btn d" onclick="send('move',[0,-1])">⬇</button>
-        <button class="move-btn r" onclick="send('move',[1,0])">➡</button>
+        <button class="move-btn r" onclick="send('move',[-1,0])">➡</button>
     </div>
-    <div style="font-size:11px; color:#666;">Arrow Keys / WASD</div>
+    <div style="font-size:11px; color:#666;">חיצים / WASD</div>
 </div>
 
 <script>
@@ -922,8 +922,8 @@ async function send(act, val=null) {
 window.addEventListener("keydown", e => {
     if(e.key == "ArrowUp" || e.key == "w" || e.key == "W") send('move',[0,1]);
     if(e.key == "ArrowDown" || e.key == "s" || e.key == "S") send('move',[0,-1]);
-    if(e.key == "ArrowLeft" || e.key == "a" || e.key == "A") send('move',[-1,0]);
-    if(e.key == "ArrowRight" || e.key == "d" || e.key == "D") send('move',[1,0]);
+    if(e.key == "ArrowLeft" || e.key == "a" || e.key == "A") send('move',[1,0]);
+    if(e.key == "ArrowRight" || e.key == "d" || e.key == "D") send('move',[-1,0]);
     if(e.key == "r" || e.key == "R") send('reset');
 });
 </script>
