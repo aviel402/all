@@ -4,7 +4,7 @@ import time
 from flask import Flask, render_template_string, request, jsonify, session, url_for
 
 app = Flask(__name__)
-app.secret_key = 'parasite_arena_enhanced_v2'
+app.secret_key = 'parasiterena_enhanced_v2'
 
 # ==========================================
 # 🧬 מאגר גופים משופר
