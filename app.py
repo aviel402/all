@@ -33,6 +33,9 @@ except ImportError: game7 = create_dummy_app("משחק 7")
 try: from app8 import app as game8
 except ImportError: game8 = create_dummy_app("משחק 8")
 
+try: from app9 import app as game9
+except ImportError: game9 = create_dummy_app("CLOVER")
+
 
 # --- הלאוצ'ר הראשי ---
 main_app = Flask(__name__)
@@ -417,6 +420,12 @@ MENU_HTML = """
             <h2>הטפיל</h2>
             <div class="tag">תודעה טפילית</div>
         </a>
+
+        <a href="/game9/" class="card" tabindex="0" role="button" aria-label="משחק CLOVER">
+            <span class="emoji-icon">🍀</span>
+            <h2>CLOVER</h2>
+            <div class="tag">Action Platformer</div>
+        </a>
     </div>
 
     <footer>
@@ -458,7 +467,9 @@ app = DispatcherMiddleware(main_app, {
     '/game5': game5,
     '/game6': game6,
     '/game7': game7,
-    '/game8': game8
+    '/game7': game7,
+    '/game8': game8,
+    '/game9': game9
 
 })
 
