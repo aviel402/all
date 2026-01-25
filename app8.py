@@ -3,7 +3,7 @@ import uuid
 from flask import Flask, render_template_string, request, jsonify, session, url_for
 
 app = Flask(__name__)
-app.secret_key = 'parasite_rinal_v12'
+app.secret_key = 'parasite_rina_v12'
 
 # ==========================================
 # 🧬 מאגר גופים
@@ -58,8 +58,8 @@ class Engine:
                     "name": n+f'{i}',
                     "host": "rat", # כולם מתחילים חלשים
                     "hp": 30, "max_hp": 30,
-                    "x": random.randint(-4, 4),
-                    "y": random.randint(-4, 4),
+                    "x": random.randint(-10, 10),
+                    "y": random.randint(-10, 10),
                     "dead": False
                 }
                 self.state["rivals"].append(bot)
