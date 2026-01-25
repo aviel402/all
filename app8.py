@@ -35,7 +35,7 @@ class Engine:
                 "hp": 20, "max_hp": 20,
                 "is_dead": False,
                 # נתוני זירה
-                "map_size": 5, # רדיוס 5 = מפה 10x10 (-5 עד 5)
+                "map_size": 7, # רדיוס 5 = מפה 10x10 (-5 עד 5)
                 "rivals": [], 
                 "map_content": {}, # מפלצות וגופות בחדרים
                 "visited": ["0,0"],
@@ -52,16 +52,17 @@ class Engine:
     def init_arena(self):
         # יצירת 4 בוטים יריבים מפוזרים
         names = ["נמסיס", "אלפא", "אומגה", "צללית"]
-        for n in names:
-            bot = {
-                "name": n,
-                "host": "rat", # כולם מתחילים חלשים
-                "hp": 30, "max_hp": 30,
-                "x": random.randint(-4, 4),
-                "y": random.randint(-4, 4),
-                "dead": False
-            }
-            self.state["rivals"].append(bot)
+        for i in range(9)
+            for n in names:
+                bot = {
+                    "name": n+f'{i}',
+                    "host": "rat", # כולם מתחילים חלשים
+                    "hp": 30, "max_hp": 30,
+                    "x": random.randint(-4, 4),
+                    "y": random.randint(-4, 4),
+                    "dead": False
+                }
+                self.state["rivals"].append(bot)
         
         # מילוי הזירה במפלצות
         for x in range(-5, 6):
