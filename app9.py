@@ -1,526 +1,595 @@
-import time
+from flask import Flask, render_template_string, jsonify, request
 import random
 import json
-import uuid
-import datetime
-from flask import Flask, request, render_template_string, jsonify, make_response
 
 app = Flask(__name__)
-app.secret_key = "aether_guilds_key"
+app.secret_key = 'clover_master_key_v99'
 
-DB_FILE = "mmorpg_data.json"
-
-# --- הגדרת המקצועות ---
-CLASSES = {
-    "guardian": {
-        "name": "🛡️ שומר", "hp": 300, "dmg": 5, 
-        "skill": "שאגה (מושך אש מהבוס)", "role": "tank", "cd": 5
-    },
-    "mage": {
-        "name": "🔥 מכשף", "hp": 100, "dmg": 40, 
-        "skill": "כדור אש (נזק כבד)", "role": "dps", "cd": 4
-    },
-    "druid": {
-        "name": "🌿 דרואיד", "hp": 150, "dmg": 8, 
-        "skill": "ריפוי קבוצתי (מרפא את כולם)", "role": "healer", "cd": 6
+# Placeholder for persistent improvement storage (in a real app, use a DB)
+# Using a simple file-based or global variable approach for this session
+PLAYER_DATA = {
+    "shards": 0,
+    "unlocks": ["fire", "warrior"], # Default unlocked classes
+    "upgrades": {
+        "hp": 0,
+        "energy_charge": 0,
+        "potion": 0
     }
 }
-
-# --- דאטהבייס ומנוע משחק ---
-
-def load_db():
-    if not os_path_exists(DB_FILE):
-        return init_world()
-    try:
-        with open(DB_FILE, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    except: return init_world()
-
-def init_world():
-    return {
-        "players": {},
-        "boss": spawn_boss(1),
-        "chat": [],
-        "last_boss_attack": time.time()
-    }
-
-def save_db(data):
-    with open(DB_FILE, 'w', encoding='utf-8') as f:
-        json.dump(data, f, ensure_ascii=False)
-
-def os_path_exists(path):
-    import os
-    return os.path.exists(path)
-
-def spawn_boss(level):
-    names = ["דרקון האפר", "גולם בזלת", "מלך השלדים", "שד הלהבות"]
-    return {
-        "name": random.choice(names),
-        "level": level,
-        "max_hp": 1000 + (level * 500),
-        "hp": 1000 + (level * 500),
-        "dmg": 20 + (level * 5),
-        "target": None, # על מי הבוס כועס עכשיו
-        "status": "alive"
-    }
-
-def add_log(db, text, type="info"):
-    msg = {"time": datetime.datetime.now().strftime("%H:%M:%S"), "text": text, "type": type}
-    db['chat'].insert(0, msg)
-    db['chat'] = db['chat'][:30]
-
-# --- שרת WEB ---
 
 @app.route('/')
-def home():
-    uid = request.cookies.get('player_id')
-    db = load_db()
-    if uid and uid in db['players']:
-        return render_template_string(GAME_HTML)
-    return render_template_string(LOGIN_HTML)
+def idx():
+    return render_template_string(GAME_HTML)
 
-@app.route('/login', methods=['POST'])
-def login():
-    name = request.form.get('name')
-    role = request.form.get('role')
-    
-    if not name or role not in CLASSES: return "Invalid Data", 400
-    
-    db = load_db()
-    uid = str(uuid.uuid4())
-    
-    base_stats = CLASSES[role]
-    db['players'][uid] = {
-        "id": uid, "name": name, "role": role,
-        "lvl": 1, "xp": 0,
-        "hp": base_stats['hp'], "max_hp": base_stats['hp'],
-        "dead_until": 0, "last_action": 0
-    }
-    
-    add_log(db, f"✨ הגיבור {name} ({base_stats['name']}) הצטרף לגילדה.", "join")
-    save_db(db)
-    
-    resp = make_response(jsonify({"status": "ok"}))
-    resp.set_cookie('player_id', uid)
-    return resp
+@app.route('/save', methods=['POST'])
+def save_progress():
+    global PLAYER_DATA
+    data = request.json
+    PLAYER_DATA["shards"] += data.get("shards", 0)
+    return jsonify(PLAYER_DATA)
 
-# --- לוגיקת משחק בזמן אמת ---
+@app.route('/data')
+def get_data():
+    return jsonify(PLAYER_DATA)
 
-@app.route('/api/gamestate')
-def gamestate():
-    uid = request.cookies.get('player_id')
-    db = load_db()
-    
-    if not uid or uid not in db['players']: return jsonify({"error": "relogin"})
-    me = db['players'][uid]
-    boss = db['boss']
-    
-    current_time = time.time()
-    
-    # 1. התחדשות ובוס AI
-    if boss['status'] == "alive":
-        # הבוס תוקף כל 3 שניות
-        if current_time - db['last_boss_attack'] > 3:
-            living_players = [p for p in db['players'].values() if p['hp'] > 0]
-            if living_players:
-                # אם יש לבוס מטרה ספציפית (טאונט), תקוף אותה. אחרת רנדומלי
-                target_id = boss['target']
-                victim = next((p for p in living_players if p['id'] == target_id), None)
-                
-                if not victim: # אם המטרה מתה או לא קיימת, בחר רנדומלי
-                    victim = random.choice(living_players)
-                    boss['target'] = victim['id']
-                
-                dmg = boss['dmg'] + random.randint(-5, 5)
-                victim['hp'] -= dmg
-                db['last_boss_attack'] = current_time
-                
-                add_log(db, f"👿 {boss['name']} תקף את {victim['name']} ב-{dmg} נזק!", "boss_atk")
-                
-                if victim['hp'] <= 0:
-                    victim['hp'] = 0
-                    victim['dead_until'] = current_time + 10 # החייאה אחרי 10 שניות
-                    boss['target'] = None # הבוס מחפש קורבן חדש
-                    add_log(db, f"💀 {victim['name']} נפל בקרב!", "death")
-                
-                save_db(db) # שומרים את השינוי כי הבוס פעל אוטונומית
-
-    # 2. החייאת שחקנים מתים
-    if me['hp'] <= 0 and current_time > me['dead_until']:
-        me['hp'] = int(me['max_hp'] * 0.5)
-        save_db(db)
-
-    # 3. בוס Respawn
-    if boss['status'] == "dead" and current_time > db['boss_respawn_time']:
-        db['boss'] = spawn_boss(boss['level'] + 1)
-        add_log(db, f"⚠️ בוס חדש הופיע: {db['boss']['name']} (רמה {db['boss']['level']})", "boss_spawn")
-        save_db(db)
-
-    # בניית המידע לתצוגה
-    other_players = [p for pid, p in db['players'].items() if pid != uid and (current_time - p.get('last_seen', 0) < 60)]
-    
-    # עדכון שנראינו לאחרונה (Heartbeat)
-    db['players'][uid]['last_seen'] = current_time
-    save_db(db) # שמירה לייט ללא כתיבה מסיבית אם אין שינוי משמעותי? כאן נשמור תמיד לשם פשטות.
-
-    return jsonify({
-        "me": me,
-        "boss": boss,
-        "team": other_players,
-        "chat": db['chat'],
-        "classes": CLASSES
-    })
-
-@app.route('/api/action', methods=['POST'])
-def action():
-    uid = request.cookies.get('player_id')
-    act_type = request.json.get('type') # attack, skill
-    db = load_db()
-    
-    me = db['players'][uid]
-    boss = db['boss']
-    cls = CLASSES[me['role']]
-    
-    if me['hp'] <= 0: return jsonify({"msg": "אתה מת! חכה להחייאה"})
-    if boss['status'] != 'alive': return jsonify({"msg": "הבוס מת"})
-    
-    current_time = time.time()
-    
-    # התקפה רגילה
-    if act_type == 'attack':
-        boss['hp'] -= cls['dmg']
-        msg = f"פגעת בבוס ({cls['dmg']})"
-    
-    # יכולת מיוחדת (Cooldown)
-    elif act_type == 'skill':
-        if current_time - me['last_action'] < cls['cd']:
-            return jsonify({"msg": "היכולת בטעינה!"})
-        
-        me['last_action'] = current_time
-        
-        if me['role'] == 'guardian':
-            boss['target'] = uid # Taunt
-            boss['hp'] -= cls['dmg'] * 2
-            add_log(db, f"🛡️ {me['name']} שאג ומשך את הבוס אליו!", "skill")
-            
-        elif me['role'] == 'mage':
-            dmg = cls['dmg'] * 3
-            boss['hp'] -= dmg
-            add_log(db, f"🔥 {me['name']} הטיל כדור אש! {dmg} נזק.", "skill")
-            
-        elif me['role'] == 'druid':
-            # ריפוי כל הקבוצה
-            heal = 40 + (me['lvl'] * 5)
-            for p in db['players'].values():
-                if p['hp'] > 0:
-                    p['hp'] = min(p['max_hp'], p['hp'] + heal)
-            add_log(db, f"🌿 {me['name']} ריפא את כל הקבוצה ב-{heal} חיים.", "heal")
-
-    # בדיקה אם הבוס מת
-    if boss['hp'] <= 0:
-        boss['hp'] = 0
-        boss['status'] = "dead"
-        db['boss_respawn_time'] = current_time + 10
-        # חלוקת XP לכולם
-        xp_gain = 50 * boss['level']
-        for p in db['players'].values():
-            p['xp'] += xp_gain
-            if p['xp'] >= p['lvl'] * 100:
-                p['lvl'] += 1
-                p['xp'] = 0
-                p['max_hp'] += 50
-                p['hp'] = p['max_hp']
-        add_log(db, f"🏆 הבוס חוסל! כולם קיבלו {xp_gain} ניסיון.", "win")
-
-    save_db(db)
-    return jsonify({"success": True})
-
-# --- Frontend HTML ---
-
-LOGIN_HTML = """
-<!DOCTYPE html>
-<html lang="he" dir="rtl">
-<head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>גילדות האתר - כניסה</title>
-<style>
-body { background: #1a1a2e; color: #fff; font-family: 'Segoe UI', sans-serif; text-align: center; display: flex; flex-direction: column; justify-content: center; height: 100vh; margin: 0; }
-.card { background: #16213e; padding: 30px; border-radius: 15px; border: 2px solid #e94560; max-width: 400px; margin: auto; box-shadow: 0 0 20px rgba(233, 69, 96, 0.2); }
-input, select, button { width: 100%; padding: 12px; margin: 10px 0; border-radius: 5px; font-size: 16px; border: none; box-sizing: border-box;}
-button { background: #e94560; color: white; font-weight: bold; cursor: pointer; transition: 0.3s; }
-button:hover { background: #ff2e63; }
-</style>
-</head>
-<body>
-<div class="card">
-    <h1>⚔️ גילדות האתר ⚔️</h1>
-    <p>העולם זקוק לגיבורים. בחרו נתיב.</p>
-    <form id="loginForm">
-        <input type="text" id="name" placeholder="שם הגיבור" required>
-        <select id="role">
-            <option value="guardian">🛡️ שומר (Tank) - המגן האנושי</option>
-            <option value="mage">🔥 מכשף (DPS) - אדון האש</option>
-            <option value="druid">🌿 דרואיד (Healer) - מרפא הפצעים</option>
-        </select>
-        <button type="submit">צא להרפתקה</button>
-    </form>
-</div>
-<script>
-document.getElementById('loginForm').onsubmit = async (e) => {
-    e.preventDefault();
-    let fd = new FormData();
-    fd.append('name', document.getElementById('name').value);
-    fd.append('role', document.getElementById('role').value);
-    await fetch('/login', {method: 'POST', body: fd});
-    window.location.reload();
-}
-</script>
-</body>
-</html>
-"""
+@app.route('/unlock', methods=['POST'])
+def unlock_class():
+    # Logic to buy classes/upgrades
+    return jsonify({"status": "ok"})
 
 GAME_HTML = """
 <!DOCTYPE html>
-<html lang="he" dir="rtl">
+<html lang="en">
 <head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Raid Battle</title>
-<style>
-/* Reset & Base */
-body { background: #0f0f13; color: #e0e0e0; font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; padding-bottom: 20px; overflow-x: hidden; }
-* { box-sizing: border-box; }
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CLOVER - Elemental Chronicles</title>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-sky: #87CEEB;
+            --bg-sunset: #FF7F50;
+            --ui-bg: rgba(20, 20, 30, 0.9);
+            --text-color: #eee;
+        }
+        body { margin: 0; overflow: hidden; background: #111; font-family: 'Press Start 2P', cursive; color: var(--text-color); }
+        canvas { display: block; image-rendering: pixelated; }
+        
+        #ui-layer {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 20px;
+            box-sizing: border-box;
+        }
 
-/* HUD Header */
-.hud { background: #1f1f25; padding: 10px; display: flex; justify-content: space-between; align-items: center; border-bottom: 3px solid #333; position: sticky; top: 0; z-index: 100; box-shadow: 0 5px 15px rgba(0,0,0,0.5); }
-.hero-stats { font-size: 14px; font-weight: bold; }
-.hero-lvl { background: #ffd700; color: black; padding: 2px 6px; border-radius: 4px; }
-
-/* Main Boss Arena */
-.arena { text-align: center; padding: 20px; min-height: 250px; background: url('https://i.imgur.com/3q1Zc8s.png') no-repeat center; background-size: cover; position: relative; }
-.arena::before { content:''; position:absolute; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.7); }
-.boss-container { position: relative; z-index: 10; margin: 20px auto; max-width: 600px; }
-
-.boss-avatar { font-size: 80px; text-shadow: 0 0 20px red; animation: float 3s infinite ease-in-out; }
-.boss-name { font-size: 24px; font-weight: 900; color: #ff4757; text-transform: uppercase; text-shadow: 0 2px 0 black; margin-bottom: 5px; }
-.health-bar { background: #333; height: 20px; width: 100%; border-radius: 10px; overflow: hidden; border: 2px solid #555; position: relative; }
-.health-fill { background: #e84118; height: 100%; width: 100%; transition: width 0.3s; }
-.health-text { position: absolute; width: 100%; text-align: center; top: -1px; font-size: 14px; font-weight: bold; color: white; text-shadow: 1px 1px 1px black; }
-
-.taunt-marker { font-size: 12px; background: #eccc68; color: black; padding: 3px 8px; border-radius: 10px; display: inline-block; margin-bottom: 5px; border: 1px solid #ffa502; }
-
-/* Player Actions */
-.controls { position: fixed; bottom: 0; width: 100%; background: #161b22; padding: 15px; display: flex; gap: 10px; justify-content: center; border-top: 1px solid #30363d; z-index: 100; }
-.btn { border: none; padding: 15px 0; border-radius: 8px; font-size: 18px; font-weight: bold; cursor: pointer; flex: 1; max-width: 200px; transition: transform 0.1s, opacity 0.3s; position: relative; overflow: hidden; }
-.btn:active { transform: scale(0.95); }
-.btn-atk { background: #dfe4ea; color: #2f3542; border-bottom: 4px solid #ced6e0; }
-.btn-skill { background: #3742fa; color: white; border-bottom: 4px solid #232eba; }
-.btn-cd { position: absolute; top:0; left:0; height:100%; width:100%; background: rgba(0,0,0,0.6); display: none; } /* Cooldown overlay */
-
-/* Party Grid */
-.party-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; padding: 15px; margin-bottom: 80px; }
-.player-card { background: #2f3640; padding: 10px; border-radius: 8px; text-align: center; border: 1px solid #353b48; transition: 0.3s; }
-.p-role { font-size: 24px; margin-bottom: 5px; }
-.p-name { font-size: 14px; font-weight: bold; color: #f1f2f6; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.p-hp-bar { height: 6px; background: #222; border-radius: 3px; margin-top: 5px; overflow: hidden; }
-.p-hp-fill { height: 100%; background: #2ed573; transition: width 0.3s; }
-.dead-card { opacity: 0.5; border-color: red; filter: grayscale(1); }
-
-/* Combat Log */
-.logs { background: rgba(0,0,0,0.8); color: #ccc; height: 120px; overflow-y: auto; font-family: monospace; font-size: 12px; padding: 10px; border-bottom: 2px solid #444; }
-.log-row { margin-bottom: 3px; }
-.log-join { color: #f6e58d; }
-.log-boss_atk { color: #ff6b6b; }
-.log-heal { color: #7bed9f; }
-.log-win { color: gold; font-weight: bold; }
-
-@keyframes float { 0% { transform: translateY(0px); } 50% { transform: translateY(-15px); } 100% { transform: translateY(0px); } }
-.shake { animation: shake 0.5s; }
-@keyframes shake { 0% { transform: translate(1px, 1px) rotate(0deg); } 10% { transform: translate(-1px, -2px) rotate(-1deg); } 20% { transform: translate(-3px, 0px) rotate(1deg); } 30% { transform: translate(3px, 2px) rotate(0deg); } 40% { transform: translate(1px, -1px) rotate(1deg); } 50% { transform: translate(-1px, 2px) rotate(-1deg); } 60% { transform: translate(-3px, 1px) rotate(0deg); } 70% { transform: translate(3px, 1px) rotate(-1deg); } 80% { transform: translate(-1px, -1px) rotate(1deg); } 90% { transform: translate(1px, 2px) rotate(0deg); } 100% { transform: translate(1px, -2px) rotate(-1deg); } }
-
-</style>
+        .hud-bar { display: flex; gap: 20px; align-items: center; }
+        .bar-container { position: relative; width: 200px; height: 20px; background: #333; border: 2px solid #fff; }
+        .bar-fill { height: 100%; transition: width 0.1s; }
+        .hp-fill { background: #f00; }
+        .en-fill { background: #0df; }
+        
+        #menu-screen, #char-select, #shop-screen {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: rgba(0,0,0,0.85);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            pointer-events: auto;
+            z-index: 100;
+        }
+        
+        .hidden { display: none !important; }
+        
+        h1 { font-size: 40px; color: #fff; text-shadow: 4px 4px 0 #000; margin-bottom: 40px; }
+        h2 { color: gold; margin-bottom: 20px; }
+        
+        .btn {
+            background: #333;
+            border: 4px solid #fff;
+            color: #fff;
+            padding: 15px 30px;
+            font-family: inherit;
+            font-size: 16px;
+            cursor: pointer;
+            margin: 10px;
+            text-transform: uppercase;
+            transition: transform 0.1s;
+        }
+        .btn:hover { background: #555; transform: scale(1.05); }
+        .btn:active { transform: scale(0.95); }
+        
+        .char-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; max-width: 800px; }
+        .char-card {
+            background: #222;
+            border: 2px solid #555;
+            padding: 10px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .char-card:hover { border-color: gold; background: #333; }
+        .char-card.locked { opacity: 0.5; cursor: not-allowed; }
+        .char-icon { width: 64px; height: 64px; margin: 0 auto 10px; background: #000; image-rendering: pixelated;}
+        
+        .controls-hint {
+            position: absolute; bottom: 20px; right: 20px;
+            text-align: right; font-size: 10px; opacity: 0.7;
+        }
+        
+        /* Scanline effect */
+        .scanlines {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,0) 50%, rgba(0,0,0,0.2) 50%, rgba(0,0,0,0.2));
+            background-size: 100% 4px;
+            pointer-events: none;
+            z-index: 999;
+        }
+    </style>
 </head>
 <body>
 
-<!-- Combat Log -->
-<div class="logs" id="chatBox"></div>
+<div class="scanlines"></div>
 
-<div class="hud">
-    <div class="hero-stats">
-        <span class="hero-lvl">Lv.<span id="myLvl">1</span></span>
-        <span id="myName">Loading...</span>
-    </div>
-    <div style="font-size:12px; color: #a4b0be">לחץ להתקפה</div>
-</div>
+<!-- Game Canvas -->
+<canvas id="gameCanvas"></canvas>
 
-<div class="arena" id="arenaBg">
-    <div class="boss-container">
-        <div class="boss-avatar" id="bossIcon">🐲</div>
-        <div id="targetBadge" style="display:none;" class="taunt-marker">TARGET 🎯</div>
-        <div class="boss-name" id="bossName">Loading Boss...</div>
-        <div class="health-bar">
-            <div class="health-fill" id="bossHpBar"></div>
-            <div class="health-text"><span id="bossHp">0</span> / <span id="bossMax">0</span></div>
+<!-- UI Layer -->
+<div id="ui-layer" class="hidden">
+    <div class="hud-top">
+        <div class="hud-bar">
+            <span>HP</span>
+            <div class="bar-container"><div class="bar-fill hp-fill" id="hp-bar" style="width: 100%"></div></div>
+        </div>
+        <div class="hud-bar" style="margin-top: 5px;">
+            <span>EN</span>
+            <div class="bar-container"><div class="bar-fill en-fill" id="en-bar" style="width: 100%"></div></div>
         </div>
     </div>
+    <div class="hud-bottom">
+        <div id="shards-display">💎 0</div>
+    </div>
 </div>
 
-<div class="party-grid" id="partyList">
-    <!-- שחקנים אחרים יופיעו פה -->
+<!-- Main Menu -->
+<div id="menu-screen">
+    <h1>🍀 CLOVER</h1>
+    <button class="btn" onclick="openCharSelect()">Start Game</button>
+    <button class="btn" disabled>Options</button>
 </div>
 
-<div class="controls">
-    <button class="btn btn-atk" onclick="doAction('attack')">⚔️ התקפה</button>
-    <button class="btn btn-skill" onclick="doAction('skill')" id="skillBtn">
-        ✨ <span id="skillName">יכולת</span>
-    </button>
+<!-- Character Select -->
+<div id="char-select" class="hidden">
+    <h2>Choose Your Wizard</h2>
+    <div class="char-grid" id="char-grid">
+        <!-- Generated by JS -->
+    </div>
+    <button class="btn" onclick="backToMenu()" style="margin-top: 30px;">Back</button>
 </div>
 
 <script>
-// סמלים לפי תפקיד
-const ICONS = {'guardian': '🛡️', 'mage': '🔥', 'druid': '🌿'};
-let skillCooldown = 0;
-let cdTimer = null;
+/**
+ * CLOVER Game Engine
+ * A simple JS engine for Platformer mechanics
+ */
 
-async function updateState() {
-    try {
-        let res = await fetch('/api/gamestate');
-        let data = await res.json();
-        if(data.error) window.location.reload();
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
 
-        renderMyStats(data.me, data.classes);
-        renderBoss(data.boss, data.players, data.me.id);
-        renderParty(data.me, data.team, data.boss.target);
-        renderChat(data.chat);
-    } catch(e) {}
-    
-    requestAnimationFrame(() => setTimeout(updateState, 1000));
+// Game Constants
+const GRAVITY = 0.5;
+const FRICTION = 0.8;
+const GAME_WIDTH = 960; // 480 * 2 for sharp pixels
+const GAME_HEIGHT = 540; // 270 * 2
+
+let lastTime = 0;
+let gameState = 'MENU'; // MENU, PLAY, GAMEOVER
+let camera = { x: 0, y: 0 };
+let shards = 0;
+
+// Input Handling
+const keys = { w:false, a:false, s:false, d:false, j:false, k:false, h:false, u:false };
+
+window.addEventListener('keydown', e => {
+    if(keys.hasOwnProperty(e.key.toLowerCase())) keys[e.key.toLowerCase()] = true;
+});
+window.addEventListener('keyup', e => {
+    if(keys.hasOwnProperty(e.key.toLowerCase())) keys[e.key.toLowerCase()] = false;
+});
+
+window.addEventListener('resize', resize);
+function resize() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    ctx.imageSmoothingEnabled = false;
 }
+resize();
 
-function renderMyStats(me, classes) {
-    document.getElementById('myName').innerText = ICONS[me.role] + ' ' + me.name;
-    document.getElementById('myLvl').innerText = me.lvl;
+// Classes Data
+const CLASSES = {
+    fire: { name: "Pyromancer", color: "#f42", skill: "Fireball", ult: "Inferno" },
+    water: { name: "Hydromancer", color: "#24f", skill: "Wave", ult: "Tsunami" },
+    earth: { name: "Geomancer", color: "#8a4", skill: "Rock", ult: "Quake" },
+    air: { name: "Aeromancer", color: "#cdf", skill: "Windblade", ult: "Tornado" },
+    warrior: { name: "Warrior", color: "#aaa", skill: "Slash", ult: "Slam" },
+    light: { name: "Lightbringer", color: "#fd0", skill: "Beam", ult: "Nova" },
+    dark: { name: "Voidwalker", color: "#408", skill: "Void", ult: "Blackhole" }
+};
+
+// Game Objects
+let player;
+let enemies = [];
+let particles = [];
+let projectiles = [];
+let level = [];
+let backgroundLayers = [];
+
+class Entity {
+    constructor(x, y, w, h, color) {
+        this.x = x; this.y = y;
+        this.w = w; this.h = h;
+        this.vx = 0; this.vy = 0;
+        this.color = color;
+        this.grounded = false;
+        this.facing = 1; // 1 right, -1 left
+        this.hp = 100;
+        this.maxHp = 100;
+    }
     
-    // Skill Button
-    let btn = document.getElementById('skillBtn');
-    let skillData = classes[me.role];
-    document.getElementById('skillName').innerText = skillData.skill;
-    skillCooldown = skillData.cd; // שמירה לשימוש ללחיצה
+    update() {
+        // Physics
+        this.vy += GRAVITY;
+        this.x += this.vx;
+        this.y += this.vy;
+        
+        // Ground Collision (Simple floor at y=400 for demo)
+        if (this.y + this.h > 400) {
+            this.y = 400 - this.h;
+            this.vy = 0;
+            this.grounded = true;
+        } else {
+            this.grounded = false;
+        }
+        
+        // Friction
+        this.vx *= FRICTION;
+    }
     
-    if (me.hp <= 0) {
-        document.body.style.filter = "grayscale(1)";
-    } else {
-        document.body.style.filter = "none";
+    draw(camX) {
+        ctx.fillStyle = this.color;
+        ctx.fillRect(this.x - camX, this.y, this.w, this.h);
     }
 }
 
-function renderBoss(boss, players, myId) {
-    if (boss.status === 'dead') {
-        document.getElementById('bossName').innerText = "💀 הבוס מת...";
-        document.getElementById('bossIcon').innerText = "⚰️";
-        document.getElementById('bossHpBar').style.width = "0%";
-        document.getElementById('targetBadge').style.display = 'none';
-        return;
+class Player extends Entity {
+    constructor(clsKey) {
+        super(100, 300, 32, 64, CLASSES[clsKey].color);
+        this.cls = CLASSES[clsKey];
+        this.energy = 100;
+        this.maxEnergy = 100;
+        this.charging = false;
+        this.attackCooldown = 0;
     }
-
-    document.getElementById('bossName').innerText = boss.name + " (Lv." + boss.level + ")";
-    document.getElementById('bossIcon').innerText = "🐲"; // או גיוון לפי שם
-    document.getElementById('bossHp').innerText = boss.hp;
-    document.getElementById('bossMax').innerText = boss.max_hp;
-    let pct = (boss.hp / boss.max_hp) * 100;
-    document.getElementById('bossHpBar').style.width = pct + "%";
     
-    // האם הבוס מסתכל עליי?
-    let targetEl = document.getElementById('targetBadge');
-    if (boss.target === myId) {
-        targetEl.style.display = 'inline-block';
-        targetEl.innerText = "😡 תוקף אותך!";
-        targetEl.style.background = 'red';
-        targetEl.style.color = 'white';
-        document.getElementById('arenaBg').style.borderColor = "red";
-    } else if (boss.target) {
-        targetEl.style.display = 'inline-block';
-        targetEl.innerText = "🎯 נעול על טרף";
-        targetEl.style.background = '#eccc68';
-        document.getElementById('arenaBg').style.borderColor = "transparent";
-    } else {
-        targetEl.style.display = 'none';
+    update() {
+        if (this.hp <= 0) return;
+        
+        // Input Movement
+        if (!this.charging) {
+            if (keys.a) { this.vx -= 1.5; this.facing = -1; }
+            if (keys.d) { this.vx += 1.5; this.facing = 1; }
+            if (keys.w && this.grounded) { this.vy = -12; this.grounded = false; }
+        }
+        
+        // Energy Charge
+        this.charging = keys.u;
+        if (this.charging) {
+            this.energy = Math.min(this.energy + 1, this.maxEnergy);
+            this.vx *= 0.5; // Slow down
+            spawnParticles(this.x + this.w/2, this.y + this.h/2, this.color, 1);
+        }
+        
+        // Combat
+        if (this.attackCooldown > 0) this.attackCooldown--;
+        
+        if (keys.j && this.attackCooldown <= 0 && this.energy >= 10) {
+             this.attack('basic');
+        }
+        
+        super.update();
+        
+        // Update UI
+        document.getElementById('hp-bar').style.width = (this.hp / this.maxHp * 100) + "%";
+        document.getElementById('en-bar').style.width = (this.energy / this.maxEnergy * 100) + "%";
+    }
+    
+    attack(type) {
+        this.attackCooldown = 20;
+        this.energy -= 10;
+        
+        // Auto Aim Logic
+        let target = getNearestEnemy(this);
+        let angle = 0;
+        if (target) {
+            angle = Math.atan2((target.y + target.h/2) - (this.y + this.h/2), (target.x + target.w/2) - (this.x + this.w/2));
+        } else {
+            angle = this.facing === 1 ? 0 : Math.PI;
+        }
+        
+        // Spawn Projectile
+        projectiles.push(new Projectile(
+            this.x + this.w/2, 
+            this.y + this.h/2, 
+            Math.cos(angle) * 15, 
+            Math.sin(angle) * 15, 
+            this.color
+        ));
+    }
+    
+    draw(camX) {
+        super.draw(camX);
+        // Simple Eye
+        ctx.fillStyle = 'white';
+        let eyeX = this.facing === 1 ? this.x + 20 : this.x + 4;
+        ctx.fillRect(eyeX - camX, this.y + 10, 8, 8);
+        
+        if (this.charging) {
+            ctx.strokeStyle = 'white';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(this.x + this.w/2 - camX, this.y + this.h/2, 40, 0, Math.PI * 2);
+            ctx.stroke();
+        }
     }
 }
 
-function renderParty(me, others, bossTarget) {
-    let list = document.getElementById('partyList');
-    let html = ``;
+class Enemy extends Entity {
+    constructor(x) {
+        super(x, 300, 40, 40, '#a33');
+        this.timer = 0;
+    }
     
-    // אני (תמיד ראשון)
-    let myHpPct = (me.hp / me.max_hp) * 100;
-    html += createCardHTML(me, myHpPct, true, me.id === bossTarget);
+    update() {
+        if (this.hp <= 0) return;
+        super.update();
+        
+        // Simple AI
+        this.timer++;
+        if (this.timer % 100 < 50) this.vx = 0.5;
+        else this.vx = -0.5;
+        
+        // Damage Player
+        if (checkRectCollide(this, player)) {
+             player.hp -= 1;
+             player.vx += (this.x > player.x ? -5 : 5);
+             shakeScreen(5);
+        }
+    }
+}
+
+class Projectile {
+    constructor(x, y, vx, vy, color) {
+        this.x = x; this.y = y; this.vx = vx; this.vy = vy;
+        this.color = color;
+        this.w = 10; this.h = 10;
+        this.life = 60;
+    }
+    update() {
+        this.x += this.vx;
+        this.y += this.vy;
+        this.life--;
+        spawnParticles(this.x, this.y, this.color, 1, 0.5);
+    }
+    draw(camX) {
+        ctx.fillStyle = this.color;
+        ctx.beginPath();
+        ctx.arc(this.x - camX, this.y, 8, 0, Math.PI * 2);
+        ctx.fill();
+        // Glow
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = this.color;
+        ctx.fill();
+        ctx.shadowBlur = 0;
+    }
+}
+
+class Particle {
+    constructor(x, y, color, speed) {
+        this.x = x; this.y = y;
+        this.vx = (Math.random() - 0.5) * speed * 5;
+        this.vy = (Math.random() - 0.5) * speed * 5;
+        this.color = color;
+        this.life = 30 + Math.random() * 20;
+        this.size = Math.random() * 4 + 2;
+    }
+    update() {
+        this.x += this.vx;
+        this.y += this.vy;
+        this.life--;
+        this.size *= 0.95;
+    }
+    draw(camX) {
+        ctx.fillStyle = this.color;
+        ctx.globalAlpha = this.life / 50;
+        ctx.fillRect(this.x - camX, this.y, this.size, this.size);
+        ctx.globalAlpha = 1;
+    }
+}
+
+// Helpers
+function getNearestEnemy(p) {
+    let nearest = null;
+    let minDist = 600; // range
+    for (let e of enemies) {
+        let dist = Math.hypot(e.x - p.x, e.y - p.y);
+        if (dist < minDist) {
+            minDist = dist;
+            nearest = e;
+        }
+    }
+    return nearest;
+}
+
+function checkRectCollide(r1, r2) {
+    return (r1.x < r2.x + r2.w && r1.x + r1.w > r2.x &&
+            r1.y < r2.y + r2.h && r1.y + r1.h > r2.y);
+}
+
+function spawnParticles(x, y, color, count, speed=1) {
+    for(let i=0; i<count; i++) particles.push(new Particle(x, y, color, speed));
+}
+
+let shake = 0;
+function shakeScreen(amount) { shake = amount; }
+
+// Core Loops
+function initGame(clsKey) {
+    player = new Player(clsKey);
+    enemies = [];
+    particles = [];
+    projectiles = [];
     
-    // אחרים
-    others.forEach(p => {
-        let pct = (p.hp / p.max_hp) * 100;
-        html += createCardHTML(p, pct, false, p.id === bossTarget);
+    // Spawn random enemies
+    for(let i=0; i<10; i++) {
+        enemies.push(new Enemy(600 + i * 400));
+    }
+    
+    document.getElementById('menu-screen').classList.add('hidden');
+    document.getElementById('char-select').classList.add('hidden');
+    document.getElementById('ui-layer').classList.remove('hidden');
+    
+    gameState = 'PLAY';
+    loop();
+}
+
+function update() {
+    if (gameState !== 'PLAY') return;
+    
+    player.update();
+    
+    // Camera follow
+    camera.x += (player.x - 300 - camera.x) * 0.1;
+    
+    // update entities
+    enemies = enemies.filter(e => e.hp > 0);
+    enemies.forEach(e => e.update());
+    
+    projectiles = projectiles.filter(p => p.life > 0);
+    projectiles.forEach(p => {
+        p.update();
+        // Collision with enemies
+        for (let e of enemies) {
+            if (checkRectCollide(p, e)) {
+                e.hp -= 20;
+                p.life = 0;
+                spawnParticles(e.x + e.w/2, e.y + e.h/2, '#fff', 10);
+                shakeScreen(2);
+                break;
+            }
+        }
     });
     
-    list.innerHTML = html;
-}
-
-function createCardHTML(p, hpPct, isMe, isTarget) {
-    let hpColor = hpPct < 30 ? '#ff4757' : '#2ed573';
-    let border = isTarget ? 'border: 2px solid red;' : '';
-    let deadClass = p.hp <= 0 ? 'dead-card' : '';
-    let youLabel = isMe ? '<small>(אתה)</small>' : '';
+    particles = particles.filter(p => p.life > 0);
+    particles.forEach(p => p.update());
     
-    return `
-    <div class="player-card ${deadClass}" style="${border}">
-        <div class="p-role">${ICONS[p.role]}</div>
-        <div class="p-name">${p.name} ${youLabel}</div>
-        <div class="p-hp-bar">
-            <div class="p-hp-fill" style="width:${hpPct}%; background:${hpColor}"></div>
-        </div>
-        <div style="font-size:10px; margin-top:2px;">${p.hp}/${p.max_hp}</div>
-    </div>
-    `;
+    if (player.hp <= 0) {
+        // Game Over logic
+        gameState = 'GAMEOVER';
+        alert("GAME OVER - You died!");
+        location.reload();
+    }
 }
 
-function renderChat(logs) {
-    let box = document.getElementById('chatBox');
-    let html = '';
-    logs.forEach(l => {
-        let cls = `log-${l.type}`;
-        html += `<div class="log-row ${cls}"><span style="opacity:0.5">[${l.time}]</span> ${l.text}</div>`;
-    });
-    box.innerHTML = html;
-}
-
-async function doAction(type) {
-    // אנימציית Cooldown פשוטה בכפתור
-    let btn = type === 'attack' ? document.querySelector('.btn-atk') : document.querySelector('.btn-skill');
+function draw() {
+    // Clear
+    ctx.fillStyle = '#111';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
     
-    if (type === 'skill') {
-        btn.disabled = true;
-        btn.style.opacity = 0.5;
-        setTimeout(() => { btn.disabled = false; btn.style.opacity = 1; }, skillCooldown * 1000);
+    // Parallax Background
+    // Sky
+    let grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+    grad.addColorStop(0, '#000');
+    grad.addColorStop(1, '#224');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0,0, canvas.width, canvas.height);
+    
+    // Stars
+    ctx.fillStyle = '#fff';
+    for(let i=0; i<100; i++) {
+        ctx.fillRect(((i*67) - camera.x * 0.1) % canvas.width, (i * 43) % 400, 2, 2);
     }
     
-    // אפקט רעידה לזירה בהתקפה
-    document.getElementById('bossIcon').classList.add('shake');
-    setTimeout(()=>document.getElementById('bossIcon').classList.remove('shake'), 500);
-
-    await fetch('/api/action', {
-        method: 'POST', headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({type: type})
-    });
-    // רענון מיידי לתגובה מהירה
-    updateState();
+    // Shake
+    let sx = 0, sy = 0;
+    if (shake > 0) {
+        sx = (Math.random() - 0.5) * shake;
+        sy = (Math.random() - 0.5) * shake;
+        shake *= 0.9;
+        if(shake < 0.5) shake = 0;
+    }
+    
+    ctx.save();
+    ctx.translate(-camera.x + sx, sy);
+    
+    // Floor
+    ctx.fillStyle = '#444';
+    ctx.fillRect(0, 400, 10000, 500);
+    
+    // Draw Game Objects
+    enemies.forEach(e => e.draw(0)); // 0 because we already translated context
+    player.draw(0);
+    projectiles.forEach(p => p.draw(0));
+    particles.forEach(p => p.draw(0));
+    
+    ctx.restore();
 }
 
-// התחל
-updateState();
+function loop(timestamp) {
+    if (gameState === 'PLAY') {
+         update();
+         draw();
+         requestAnimationFrame(loop);
+    }
+}
+
+// Menu Functions
+function openCharSelect() {
+    document.getElementById('menu-screen').classList.add('hidden');
+    document.getElementById('char-select').classList.remove('hidden');
+    
+    const grid = document.getElementById('char-grid');
+    grid.innerHTML = '';
+    
+    for (let k in CLASSES) {
+        let cls = CLASSES[k];
+        let el = document.createElement('div');
+        el.className = 'char-card';
+        el.innerHTML = `
+            <div class="char-icon" style="background:${cls.color}"></div>
+            <h3>${cls.name}</h3>
+            <p style="font-size:10px; color:#aaa">Skill: ${cls.skill}</p>
+        `;
+        el.onclick = () => initGame(k);
+        grid.appendChild(el);
+    }
+}
+
+function backToMenu() {
+    document.getElementById('char-select').classList.add('hidden');
+    document.getElementById('menu-screen').classList.remove('hidden');
+}
 
 </script>
 </body>
 </html>
 """
 
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+if __name__ == "__main__":
+    app.run(port=5007, debug=True)
