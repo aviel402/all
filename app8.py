@@ -541,8 +541,8 @@ HTML = """
     window.addEventListener("keydown", e=>{
         if(e.key=="ArrowUp") s('move',[0,1]);
         if(e.key=="ArrowDown") s('move',[0,-1]);
-        if(e.key=="ArrowLeft") s('move',[-1,0]);
-        if(e.key=="ArrowRight") s('move',[1,0]);
+        if(e.key=="ArrowLeft") s('move',[1,0]);
+        if(e.key=="ArrowRight") s('move',[-1,0]);
     });
 </script>
 </body>
