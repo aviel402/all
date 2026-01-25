@@ -3,7 +3,7 @@ import uuid
 from flask import Flask, render_template_string, request, jsonify, session, url_for
 
 app = Flask(__name__)
-app.secret_key = 'parasite_royale_final_v12'
+app.secret_key = 'parasite_royle_final_v12'
 
 # ==========================================
 # 🧬 מאגר גופים
