@@ -39,7 +39,7 @@ class Engine:
                 "rivals": [], 
                 "map_content": {}, # מפלצות וגופות בחדרים
                 "visited": ["0,0"],
-                "log": [{"text": "ברוך הבא לזירה 10x10. השמד את כל המתחרים.", "type": "sys"}]
+                "log": [{"text": "ברוך הבא לזירה 20x20. השמד את כל המתחרים.", "type": "sys"}]
             }
             self.init_arena()
         else:
