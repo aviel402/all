@@ -9,22 +9,35 @@ app.secret_key = 'parasiterena_enhanced_v2'
 # ==========================================
 # 🧬 מאגר גופים משופר
 # ==========================================
+HOSTS_names = {
+    't1': ["blob", "rat", "drone", "spider", "bug"],
+    't2': ["wolf", "soldier", "alien", "hunter", "cyborg"],
+    't3': ["robot", "beast", "dragon", "mech", "demon"]
+}
+
 HOSTS = {
     # Tier 1 - חלשים
-    "blob":    {"name": "עיסה", "icon": "🦠", "hp": 25, "atk": 3, "tier": 1, "color": "#4a9"},
-    "rat":     {"name": "עכברוש", "icon": "🐀", "hp": 35, "atk": 6, "tier": 1, "color": "#999"},
-    "drone":   {"name": "רחפן", "icon": "🛸", "hp": 30, "atk": 5, "tier": 1, "color": "#69f"},
-    
+    "blob":    {"name": "עיסה",     "icon": "🦠", "hp": 25,  "atk": 3,  "tier": 1, "color": "#4a9"},
+    "rat":     {"name": "עכברוש",   "icon": "🐀", "hp": 35,  "atk": 6,  "tier": 1, "color": "#999"},
+    "drone":   {"name": "רחפן",     "icon": "🛸", "hp": 30,  "atk": 5,  "tier": 1, "color": "#69f"},
+    "spider":  {"name": "עכביש",    "icon": "🕷️", "hp": 28,  "atk": 7,  "tier": 1, "color": "#555"},
+    "bug":     {"name": "חרק",      "icon": "🐛", "hp": 20,  "atk": 4,  "tier": 1, "color": "#7c3"},
+
     # Tier 2 - בינוניים
-    "wolf":    {"name": "זאב", "icon": "🐺", "hp": 65, "atk": 14, "tier": 2, "color": "#f93"},
-    "soldier": {"name": "חייל", "icon": "👮", "hp": 85, "atk": 16, "tier": 2, "color": "#3af"},
-    "alien":   {"name": "חייזר", "icon": "👽", "hp": 75, "atk": 19, "tier": 2, "color": "#9f3"},
+    "wolf":    {"name": "זאב",      "icon": "🐺", "hp": 65,  "atk": 14, "tier": 2, "color": "#f93"},
+    "soldier": {"name": "חייל",     "icon": "👮", "hp": 85,  "atk": 16, "tier": 2, "color": "#3af"},
+    "alien":   {"name": "חייזר",    "icon": "👽", "hp": 75,  "atk": 19, "tier": 2, "color": "#9f3"},
+    "hunter":  {"name": "צייד",     "icon": "🏹", "hp": 90,  "atk": 18, "tier": 2, "color": "#c96"},
+    "cyborg":  {"name": "סייבורג",  "icon": "🦾", "hp": 100, "atk": 20, "tier": 2, "color": "#6cc"},
 
     # Tier 3 - חזקים
-    "robot":   {"name": "רובוט", "icon": "🤖", "hp": 160, "atk": 22, "tier": 3, "color": "#f6f"},
-    "beast":   {"name": "מפלצת", "icon": "👹", "hp": 190, "atk": 27, "tier": 3, "color": "#f33"},
-    "dragon":  {"name": "דרקון", "icon": "🐲", "hp": 320, "atk": 48, "tier": 3, "color": "#fa0"}
+    "robot":   {"name": "רובוט",    "icon": "🤖", "hp": 160, "atk": 22, "tier": 3, "color": "#f6f"},
+    "beast":   {"name": "מפלצת",    "icon": "👹", "hp": 190, "atk": 27, "tier": 3, "color": "#f33"},
+    "dragon":  {"name": "דרקון",    "icon": "🐲", "hp": 320, "atk": 48, "tier": 3, "color": "#fa0"},
+    "mech":    {"name": "מכונה",    "icon": "🦿", "hp": 210, "atk": 30, "tier": 3, "color": "#888"},
+    "demon":   {"name": "שד",       "icon": "😈", "hp": 240, "atk": 34, "tier": 3, "color": "#900"}
 }
+
 
 class Engine:
     def __init__(self, state=None):
@@ -56,16 +69,17 @@ class Engine:
     def init_arena(self):
         # יצירת 8 בוטים יריבים
         names = ["אלפא", "בטא", "גמא", "דלתא", "נמסיס", "צללית", "רוח", "זעם"]
-        for i, n in enumerate(names):
-            bot = {
-                "name": n,
-                "host": "rat",
-                "hp": 35, "max_hp": 35,
-                "x": random.randint(-8, 8),
-                "y": random.randint(-8, 8),
-                "dead": False
-            }
-            self.state["rivals"].append(bot)
+        for i in range(10):
+            for  n in names:
+                bot = {
+                    "name": n+f'{i}',
+                    "host": "rat",
+                    "hp": 35, "max_hp": 35,
+                    "x": random.randint(-8, 8),
+                    "y": random.randint(-8, 8),
+                    "dead": False
+                }
+                self.state["rivals"].append(bot)
         
         # מילוי הזירה במפלצות
         for x in range(-10, 11):
@@ -74,10 +88,9 @@ class Engine:
                 
                 if random.random() < 0.55:  # 55% סיכוי למפלצת
                     rng = random.random()
-                    tier = "rat"
-                    if rng < 0.5: tier = random.choice(["blob", "rat", "drone"])
-                    elif rng < 0.8: tier = random.choice(["wolf", "soldier", "alien"])
-                    elif rng < 0.96: tier = random.choice(["robot", "beast"])
+                    if rng < 0.5: tier = random.choice(HOSTS_names['t1'])
+                    elif rng < 0.8: tier = random.choice(HOSTS_names['t2'])
+                    elif rng < 0.96: tier = random.choice(HOSTS_names['t3'])
                     else: tier = "dragon"
                     
                     self.state["map_content"][f"{x},{y}"] = {
@@ -132,8 +145,10 @@ class Engine:
                     dist = abs(bot["x"] - px) + abs(bot["y"] - py)
                     
                     # בוטים חזקים רודפים ממרחק רחוק יותר
-                    chase_dist = 4 if HOSTS[bot["host"]]["tier"] == 1 else 6
-                    
+                    if HOSTS[bot["host"]]["tier"] == 1:chase_dist=2
+                    if HOSTS[bot["host"]]["tier"] == 2:chase_dist=4
+                    if HOSTS[bot["host"]]["tier"] == 3:chase_dist=6
+
                     if dist <= chase_dist and not self.state["is_dead"]:
                         dx = 1 if bot["x"] < px else (-1 if bot["x"] > px else 0)
                         dy = 1 if bot["y"] < py else (-1 if bot["y"] > py else 0)
