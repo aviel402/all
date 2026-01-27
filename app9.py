@@ -2,41 +2,41 @@ from flask import Flask, render_template_string, jsonify, request
 import random
 import json
 
-app = Flask(name)
+app = Flask(__name__)
 app.secret_key = 'clover_master_key_v99'
 
-Placeholder for persistent improvement storage (in a real app, use a DB)
-Using a simple file-based or global variable approach for this session
+# Placeholder for persistent improvement storage (in a real app, use a DB)
+# Using a simple file-based or global variable approach for this session
 
 PLAYER_DATA = {
-"shards": 0,
-"unlocks": ["fire", "warrior"], # Default unlocked classes
-"upgrades": {
-"hp": 0,
-"energy_charge": 0,
-"potion": 0
-}
+    "shards": 0,
+    "unlocks": ["fire", "warrior"], # Default unlocked classes
+    "upgrades": {
+        "hp": 0,
+        "energy_charge": 0,
+        "potion": 0
+    }
 }
 
 @app.route('/')
 def idx():
-return render_template_string(GAME_HTML)
+    return render_template_string(GAME_HTML)
 
 @app.route('/save', methods=['POST'])
 def save_progress():
-global PLAYER_DATA
-data = request.json
-PLAYER_DATA["shards"] += data.get("shards", 0)
-return jsonify(PLAYER_DATA)
+    global PLAYER_DATA
+    data = request.json
+    PLAYER_DATA["shards"] += data.get("shards", 0)
+    return jsonify(PLAYER_DATA)
 
 @app.route('/data')
 def get_data():
-return jsonify(PLAYER_DATA)
+    return jsonify(PLAYER_DATA)
 
 @app.route('/unlock', methods=['POST'])
 def unlock_class():
-# Logic to buy classes/upgrades
-return jsonify({"status": "ok"})
+    # Logic to buy classes/upgrades
+    return jsonify({"status": "ok"})
 
 GAME_HTML = """
 
@@ -601,5 +601,5 @@ function backToMenu() {
 """
 
 
-if name == "main":
-app.run(port=5007, debug=True)
+if __name__ == "__main__":
+    app.run(port=5007, debug=True)
