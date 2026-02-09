@@ -4,7 +4,8 @@ from flask import Flask, render_template_string, send_from_directory
 import os
 import random
 
-x = '/app1' if random.random(.5) else '/app2'
+x = '/app1' if random.random() < 0.5 else '/app2'
+
 
 # --- 1. דף "בפיתוח" מעוצב ---
 def a(text):
