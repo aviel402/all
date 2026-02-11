@@ -3,225 +3,272 @@ import re
 import io
 import zipfile
 import os
+import mimetypes
 from flask import Flask, render_template_string, request, Response, send_file
-from urllib.parse import urljoin, urlparse
-from bs4 import BeautifulSoup  # נדרש: pip install beautifulsoup4
+from urllib.parse import urljoin, urlparse, unquote
+from bs4 import BeautifulSoup  # pip install beautifulsoup4
 
 app = Flask(__name__)
 
-# --- פונקציות עזר ---
+# --- קונפיגורציה לזיוף דפדפן ---
+HEADERS = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+    'Referer': 'https://www.google.com/',
+    'Accept-Language': 'en-US,en;q=0.5'
+}
 
-def get_page_content(url):
-    """מבצע בקשה עם זיוף דפדפן כדי שהאתר לא יחסום"""
-    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
+def clean_filename(url):
+    """יוצר שם קובץ נקי מכתובת URL"""
+    path = urlparse(url).path
+    filename = os.path.basename(unquote(path))
+    if not filename: return "file"
+    # הסרת תווים בעייתיים
+    return re.sub(r'[^a-zA-Z0-9._-]', '', filename)
+
+def generate_fixed_zip(url):
+    """
+    מייצר ZIP שבו כל הקישורים תוקנו כך שיעבדו אופליין בצורה מושלמת.
+    מטפל בבעיות Lazy Load שיש באתרים כמו CrazyGames.
+    """
     try:
-        response = requests.get(url, headers=headers, timeout=15)
-        # זיהוי קידוד אוטומטי (קריטי לעברית)
+        session = requests.Session()
+        session.headers.update(HEADERS)
+        response = session.get(url, timeout=15)
         response.encoding = response.apparent_encoding
-        return response
-    except Exception:
+        
+        if response.status_code != 200: return None
+
+        soup = BeautifulSoup(response.text, 'html.parser')
+        base_url = url
+        
+        # זיכרון ליצירת ה-ZIP
+        zip_buffer = io.BytesIO()
+        
+        # מעקב כדי לא להוריד אותו קובץ פעמיים
+        downloaded_files = {} 
+        file_counter = 0
+
+        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
+            
+            # 1. חיפוש נכסים: תמונות, סקריפטים, עיצובים
+            # אנחנו מחפשים גם src וגם data-src (לטעינה עצלה)
+            tags_to_process = [
+                ('img', ['src', 'data-src'], 'assets_img'),
+                ('script', ['src'], 'assets_js'),
+                ('link', ['href'], 'assets_css')
+            ]
+
+            for tag_name, attrs, folder in tags_to_process:
+                for tag in soup.find_all(tag_name):
+                    
+                    # ניקוי תגיות בעייתיות לאופליין
+                    if tag.has_attr('srcset'): del tag['srcset'] 
+                    if tag.has_attr('crossorigin'): del tag['crossorigin']
+                    if tag.has_attr('integrity'): del tag['integrity']
+
+                    # בדיקה אם קיים אחד מהמאפיינים (src/href/data-src)
+                    target_attr = None
+                    original_val = None
+                    
+                    for attr in attrs:
+                        if tag.has_attr(attr) and tag[attr]:
+                            target_attr = attr
+                            original_val = tag[attr]
+                            break
+                    
+                    if not target_attr: continue
+                    if original_val.startswith('data:') or original_val.startswith('#'): continue
+
+                    # המרה לכתובת מלאה
+                    abs_url = urljoin(base_url, original_val)
+                    
+                    # בדיקה אם כבר הורדנו
+                    if abs_url in downloaded_files:
+                        tag[target_attr] = downloaded_files[abs_url] # עדכון ה-HTML לקובץ המקומי
+                        continue
+
+                    try:
+                        # הורדת הקובץ
+                        file_res = session.get(abs_url, timeout=5)
+                        if file_res.status_code == 200:
+                            file_counter += 1
+                            
+                            # קביעת שם קובץ וסיומת
+                            ext = os.path.splitext(clean_filename(abs_url))[1]
+                            if not ext: # אם אין סיומת, ננסה לנחש לפי ה-Content-Type
+                                content_type = file_res.headers.get('Content-Type', '')
+                                ext = mimetypes.guess_extension(content_type.split(';')[0]) or '.bin'
+
+                            local_filename = f"{folder}/res_{file_counter}{ext}"
+                            
+                            # כתיבה ל-ZIP
+                            zf.writestr(local_filename, file_res.content)
+                            
+                            # עדכון ה-HTML שיצביע לקובץ המקומי
+                            tag[target_attr] = local_filename
+                            
+                            # טיפול מיוחד ל-Lazy Load:
+                            # אם הורדנו מ-data-src, נעביר את זה ל-src כדי שהדפדפן יציג את זה מיד
+                            if target_attr == 'data-src':
+                                tag['src'] = local_filename
+                                del tag['data-src']
+
+                            downloaded_files[abs_url] = local_filename
+                            print(f"Downloaded: {abs_url}")
+
+                    except Exception as e:
+                        print(f"Failed asset: {abs_url} - {e}")
+                        pass
+
+            # הוספת CSS בסיסי כדי שהאתר ייראה טוב בתוך iframe אם צריך
+            extra_css = soup.new_tag("style")
+            extra_css.string = "body { margin: 0; padding: 0; overflow-x: hidden; } img { max-width: 100%; }"
+            if soup.head: soup.head.append(extra_css)
+
+            # שמירת ה-HTML המעובד
+            zf.writestr('index.html', soup.prettify())
+        
+        zip_buffer.seek(0)
+        return zip_buffer
+
+    except Exception as e:
+        print(f"Error generating ZIP: {e}")
         return None
 
-def generate_robust_zip(url):
-    """
-    1. מנתח את ה-HTML בעזרת BeautifulSoup
-    2. עובר על כל תמונה, סקריפט ו-CSS
-    3. מוריד אותם לזיכרון
-    4. משנה את ה-src ב-HTML לנתיב מקומי (assets/...)
-    5. אורז הכל ל-ZIP תקין
-    """
-    main_res = get_page_content(url)
-    if not main_res: return None
 
-    base_url = url
-    soup = BeautifulSoup(main_res.text, 'html.parser')
-    
-    # ניצור קובץ ZIP בזיכרון
-    zip_buffer = io.BytesIO()
-
-    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-        
-        # מונה לקבצים כדי למנוע התנגשויות שמות
-        file_counter = 0
-        
-        # הגדרת אילו תגיות לחפש ואילו תכונות לשנות
-        # Tag Name | Attribute Name | Extension Default | Zip Folder
-        targets = [
-            ('img', 'src', '.jpg', 'assets'),
-            ('script', 'src', '.js', 'assets'),
-            ('link', 'href', '.css', 'assets')
-        ]
-
-        processed_urls = {}  # כדי לא להוריד את אותו קובץ פעמיים
-
-        for tag_name, attr_name, default_ext, folder in targets:
-            # מציאת כל התגיות מסוג זה שיש להן את התכונה (למשל img עם src)
-            for tag in soup.find_all(tag_name, **{attr_name: True}):
-                original_url = tag[attr_name]
-                
-                # התעלמות מקישורי DATA (base64) או קישורים ריקים
-                if not original_url or original_url.startswith('data:') or original_url.startswith('#'):
-                    continue
-
-                abs_url = urljoin(base_url, original_url)
-
-                # בדיקה אם כבר הורדנו את הקובץ הזה בסריקה הנוכחית
-                if abs_url in processed_urls:
-                    # רק נעדכן את ה-HTML לנתיב הקיים
-                    tag[attr_name] = processed_urls[abs_url]
-                    continue
-
-                try:
-                    # הורדת הנכס (Asset)
-                    res = get_page_content(abs_url)
-                    if res and res.status_code == 200:
-                        file_counter += 1
-                        
-                        # ניסיון לחלץ סיומת מקורית, אם אין משתמשים בברירת מחדל
-                        parsed_path = urlparse(abs_url).path
-                        filename = os.path.basename(parsed_path)
-                        name, ext = os.path.splitext(filename)
-                        if not ext or len(ext) > 5: # סינון סיומות מוזרות
-                            ext = default_ext
-                        
-                        # יצירת שם קובץ נקי
-                        local_filename = f"{folder}/file_{file_counter}{ext}"
-                        
-                        # שמירה לתוך ה-ZIP
-                        zip_file.writestr(local_filename, res.content)
-                        
-                        # --- החלק החשוב: שינוי ה-HTML ---
-                        # אנחנו משנים את התכונה של התגית (DOM) לכתובת המקומית
-                        tag[attr_name] = local_filename
-                        
-                        # הסרת integrity ו-crossorigin שמפריעים לטעינה מקומית
-                        if tag.get('integrity'): del tag['integrity']
-                        if tag.get('crossorigin'): del tag['crossorigin']
-
-                        # שמירה במילון כדי לא להוריד כפילויות
-                        processed_urls[abs_url] = local_filename
-
-                except Exception as e:
-                    print(f"Failed to process {abs_url}: {e}")
-                    # במקרה של כישלון, משאירים את הלינק המקורי כמו שהוא
-                    pass
-
-        # בסוף: שומרים את ה-HTML המעודכן (עם הקישורים המקומיים) לתוך ה-ZIP
-        # משתמשים ב-prettify כדי שהקוד יהיה קריא
-        zip_file.writestr('index.html', soup.prettify("utf-8"))
-
-    zip_buffer.seek(0)
-    return zip_buffer
-
-# --- ממשק משתמש ---
+# --- עיצוב ותבנית HTML ---
 HTML_UI = """
 <!DOCTYPE html>
 <html lang="he" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <title>Web-Scanner Pro v2</title>
+    <title>Web Ripper V3</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
-        body { 
-            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
-            color: #fff; 
-            font-family: 'Segoe UI', system-ui; 
-            min-height: 100vh; 
-            display: flex; 
-            align-items: center; 
+        body {
+            background-color: #121212;
+            color: white;
+            height: 100vh;
+            display: flex;
+            align-items: center;
             justify-content: center;
-        }
-        .container-box { 
-            background: rgba(255,255,255,0.1); 
-            padding: 40px; 
-            border-radius: 20px; 
-            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
-            backdrop-filter: blur(8px);
-            border: 1px solid rgba(255, 255, 255, 0.18);
-            width: 100%;
-            max-width: 600px;
-            text-align: center;
+            font-family: 'Segoe UI', sans-serif;
+            overflow: hidden;
         }
         
-        .title { 
-            font-size: 2.5rem; 
-            font-weight: bold; 
-            margin-bottom: 20px;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
-        }
-
-        .search-box {
-            background: rgba(255,255,255,0.9);
-            border: none;
-            padding: 15px;
-            border-radius: 50px;
-            margin-bottom: 30px;
-            text-align: left; /* ל-URL באנגלית */
-            direction: ltr;
-        }
-
-        .btn-custom {
-            display: block;
+        .container-center {
+            text-align: center;
+            background: #1e1e1e;
+            padding: 40px;
+            border-radius: 20px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
             width: 100%;
+            max-width: 500px;
+            border: 1px solid #333;
+        }
+
+        .title-gradient {
+            background: linear-gradient(90deg, #00C9FF 0%, #92FE9D 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            font-weight: 800;
+            font-size: 2.5rem;
+            margin-bottom: 20px;
+        }
+
+        .form-control {
+            background: #2d2d2d;
+            border: 1px solid #444;
+            color: white;
             padding: 15px;
-            margin: 10px 0;
+            text-align: center;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+        .form-control:focus {
+            background: #333;
+            color: white;
+            box-shadow: none;
+            border-color: #00C9FF;
+        }
+
+        .action-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 18px;
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: white;
             border: none;
             border-radius: 12px;
-            font-size: 1.1rem;
-            font-weight: 600;
             text-decoration: none;
-            color: white;
-            transition: transform 0.2s, box-shadow 0.2s;
+            margin-bottom: 15px;
+            transition: 0.3s;
+            cursor: pointer;
+            width: 100%;
         }
-        .btn-custom:hover { transform: translateY(-2px); color: white; }
 
-        .btn-1 { background: linear-gradient(90deg, #FDBB2D 0%, #22C1C3 100%); } /* Copy */
-        .btn-2 { background: linear-gradient(90deg, #93A5CF 0%, #E4EfE9 100%); color: #333 !important;} /* HTML Only */
-        .btn-3 { background: linear-gradient(90deg, #fc466b 0%, #3f5efb 100%); } /* Full ZIP */
+        .btn-copy { background: #6c5ce7; }
+        .btn-html { background: #00cec9; color: #333; }
+        .btn-zip { background: linear-gradient(45deg, #fd79a8, #e84393); }
+        .btn-new { background: #636e72; font-size: 0.9rem; padding: 10px;}
 
-        textarea { display: none; }
+        .action-btn:hover { transform: scale(1.03); opacity: 0.9; color: white; }
+
+        .hidden-area { display: none; }
     </style>
 </head>
 <body>
 
-    <div class="container-box">
-        <div class="title">Scrape Master 3000</div>
-        
-        <form action="/app2" method="GET">
-            <div class="input-group">
-                <input type="text" name="url" class="form-control search-box" placeholder="https://example.com" value="{{ url }}" required>
-                <button class="btn btn-primary" style="border-radius: 50px; margin-left: -50px; z-index: 10;" type="submit">GO</button>
-            </div>
-        </form>
+    <div class="container-center">
+        {% if not has_results %}
+            <!-- מסך ראשי: חיפוש -->
+            <div class="title-gradient">Web Scanner</div>
+            <form action="/app2" method="POST">
+                <input type="text" name="url" class="form-control" placeholder="https://..." required>
+                <button type="submit" class="action-btn" style="background: linear-gradient(90deg, #00C9FF 0%, #92FE9D 100%); color: #000;">
+                    סרוק כעת 🚀
+                </button>
+            </form>
+            {% if error %}
+                <div class="text-danger mt-2">{{ error }}</div>
+            {% endif %}
 
-        {% if error %}
-            <div class="alert alert-danger mt-3">{{ error }}</div>
-        {% endif %}
-
-        {% if has_results %}
-            <p class="mt-3 opacity-75">האתר נסרק בהצלחה! בחר פעולה:</p>
+        {% else %}
+            <!-- מסך תוצאות: רק כפתורים -->
+            <div class="title-gradient">הסריקה הושלמה! ✅</div>
             
-            <button onclick="copyCode()" class="btn-custom btn-1">
-                📋 העתק קוד מקור (Copy Code)
+            <button onclick="copyToClipboard()" class="action-btn btn-copy">
+                העתק קוד 📋
             </button>
-
-            <a href="/app2/dl_html?url={{ url }}" class="btn-custom btn-2">
-                📄 הורד HTML בלבד (Download HTML)
+            
+            <a href="/app2/download/html?target={{ encoded_url }}" class="action-btn btn-html">
+                הורד HTML 📄
+            </a>
+            
+            <a href="/app2/download/zip?target={{ encoded_url }}" class="action-btn btn-zip">
+                הורד חבילה מלאה (ZIP) 📦
             </a>
 
-            <a href="/app2/dl_zip?url={{ url }}" class="btn-custom btn-3">
-                📦 הורד הכל כ-ZIP (תמונות מקושרות)
-            </a>
+            <div class="mt-4 border-top pt-3 border-secondary">
+                <a href="/app2" class="action-btn btn-new">סרוק אתר אחר ↺</a>
+            </div>
 
-            <textarea id="hidden-code">{{ html_content }}</textarea>
+            <!-- הקוד עצמו מוסתר כאן לצורך העתקה -->
+            <textarea id="hidden-code" class="hidden-area">{{ html_content }}</textarea>
         {% endif %}
     </div>
 
     <script>
-        function copyCode() {
+        function copyToClipboard() {
             const code = document.getElementById('hidden-code').value;
             navigator.clipboard.writeText(code).then(() => {
-                alert('הקוד הועתק בהצלחה!');
+                const btn = document.querySelector('.btn-copy');
+                const orig = btn.innerText;
+                btn.innerText = 'הועתק בהצלחה! 👌';
+                setTimeout(() => btn.innerText = orig, 1500);
             });
         }
     </script>
@@ -229,44 +276,63 @@ HTML_UI = """
 </html>
 """
 
-# --- ROUTES ---
+# --- מסלולים (Routes) ---
 
-@app.route('/')
+@app.route('/', methods=['GET', 'POST'])
 def index():
-    url = request.args.get('url', '').strip()
-    data = {"url": url, "has_results": False}
+    if request.method == 'POST':
+        url = request.form.get('url')
+        try:
+            session = requests.Session()
+            session.headers.update(HEADERS)
+            if not url.startswith('http'): url = 'https://' + url
+            
+            res = session.get(url, timeout=10)
+            res.encoding = res.apparent_encoding
+            
+            # קידוד ה-URL כדי להעביר אותו בטוח לכפתורי ההורדה
+            from urllib.parse import quote
+            encoded_url = quote(url)
 
-    if url:
-        url = url if url.startswith('http') else 'https://' + url
-        data["url"] = url
-        res = get_page_content(url)
-        if res and res.status_code == 200:
-            data["html_content"] = res.text
-            data["has_results"] = True
-        else:
-            data["error"] = "שגיאה בחיבור לאתר. בדוק את הכתובת."
+            return render_template_string(HTML_UI, 
+                                          has_results=True, 
+                                          html_content=res.text,
+                                          encoded_url=encoded_url)
+        except Exception as e:
+            return render_template_string(HTML_UI, has_results=False, error="שגיאה בסריקת האתר. וודא שהכתובת תקינה.")
+            
+    return render_template_string(HTML_UI, has_results=False)
 
-    return render_template_string(HTML_UI, **data)
-
-@app.route('/dl_html')
+@app.route('/download/html')
 def download_html():
-    url = request.args.get('url')
-    res = get_page_content(url)
-    if res:
-        return Response(res.text, mimetype="text/html", 
-                        headers={"Content-Disposition": "attachment; filename=page.html"})
-    return "Error", 500
+    from urllib.parse import unquote
+    url = unquote(request.args.get('target'))
+    
+    try:
+        session = requests.Session()
+        session.headers.update(HEADERS)
+        res = session.get(url)
+        res.encoding = res.apparent_encoding
+        return Response(res.text, mimetype="text/html", headers={"Content-Disposition": "attachment; filename=scanned_page.html"})
+    except:
+        return "Error", 500
 
-@app.route('/dl_zip')
-def download_zip():
-    url = request.args.get('url')
-    if not url: return "No URL", 400
-
-    zip_buffer = generate_robust_zip(url)
+@app.route('/download/zip')
+def download_zip_route():
+    from urllib.parse import unquote
+    url = unquote(request.args.get('target'))
+    
+    zip_buffer = generate_fixed_zip(url)
+    
     if zip_buffer:
-        return send_file(zip_buffer, mimetype="application/zip", as_attachment=True, download_name="site_backup.zip")
+        return send_file(
+            zip_buffer,
+            mimetype='application/zip',
+            as_attachment=True,
+            download_name='website_complete.zip'
+        )
     else:
-        return "שגיאה ביצירת ה-ZIP (אולי האתר חוסם גישה)", 500
+        return "שגיאה ביצירת הקובץ. ייתכן והאתר חוסם גישה.", 400
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
