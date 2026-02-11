@@ -231,7 +231,7 @@ HTML_UI = """
 
 # --- ROUTES ---
 
-@app.route('/app2')
+@app.route('/')
 def index():
     url = request.args.get('url', '').strip()
     data = {"url": url, "has_results": False}
@@ -248,7 +248,7 @@ def index():
 
     return render_template_string(HTML_UI, **data)
 
-@app.route('/app2/dl_html')
+@app.route('/dl_html')
 def download_html():
     url = request.args.get('url')
     res = get_page_content(url)
@@ -257,7 +257,7 @@ def download_html():
                         headers={"Content-Disposition": "attachment; filename=page.html"})
     return "Error", 500
 
-@app.route('/app2/dl_zip')
+@app.route('/dl_zip')
 def download_zip():
     url = request.args.get('url')
     if not url: return "No URL", 400
