@@ -129,7 +129,8 @@ def index():
 def download():
     """מאפשר הורדה של הקוד כקובץ HTML"""
     target_url = request.args.get('url')
-    res = requests.get(target_url, headers={'User-Agent': 'Mozilla/5.0'})
+    s = requests.session()
+    res = s.get(target_url, headers={'User-Agent': 'Mozilla/5.0'})
     return Response(
         res.text,
         mimetype="text/html",
