@@ -6,7 +6,7 @@ import random
 
 # --- 1. Styled "Under Development" Page ---
 def development_page(text):
-    return f'''
+    return '''
       <style>
         body {{
           margin: 0;
@@ -23,7 +23,7 @@ def development_page(text):
         .subtitle {{ margin-top: 16px; font-size: 1.2rem; opacity: 0.85; }}
       </style>
       <div class="hero">
-        <h1>{text}</h1>
+        <h1>'''+text+'''</h1>
         <div class="subtitle">🚧 האתר עדיין בפיתוח 🚧</div>
       </div>
     '''
