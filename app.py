@@ -175,8 +175,8 @@ def index():
 # --- 5. חיבור האפליקציות באמצעות Dispatcher ---
 # בקשות ל-/app1 ילכו ל-app1, בקשות ל-/app2 ילכו ל-app2, והשאר ל-main_app
 application = DispatcherMiddleware(app, {
-    '/app1': app1,
-    '/app2': app2
+    '/app1/': app1,
+    '/app2/': app2
 })
 
 # --- 6. הרצה ---
