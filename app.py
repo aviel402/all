@@ -166,15 +166,15 @@ MENU_HTML = """
 """
 
 # --- 4. הגדרת האפליקציה הראשית ---
-main_app = Flask(__name__)
+app = Flask(__name__)
 
-@main_app.route('/')
+@app.route('/')
 def index():
     return render_template_string(MENU_HTML)
 
 # --- 5. חיבור האפליקציות באמצעות Dispatcher ---
 # בקשות ל-/app1 ילכו ל-app1, בקשות ל-/app2 ילכו ל-app2, והשאר ל-main_app
-application = DispatcherMiddleware(main_app, {
+application = DispatcherMiddleware(app, {
     '/app1': app1,
     '/app2': app2
 })
