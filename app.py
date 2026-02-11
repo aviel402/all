@@ -4,8 +4,7 @@ from flask import Flask, render_template_string, send_from_directory
 import os
 import random
 
-x = '/app1' if random.random() < 0.5 else '/app2'
-
+x = 
 
 # --- 1. דף "בפיתוח" מעוצב ---
 def a(text):
@@ -144,7 +143,7 @@ MENU_HTML = """
 
     <div class="grid">
         <a href="/app1/" class="card"><span class="emoji-icon">v1</span><h2>מגניב</h2><div class="tag">לאינטרנט רגיל</div></a>
-        <a href=" """+x+"""/"class="card"><span class="emoji-icon">רנדומלי</span><h2><<< >>></h2><div class="tag"></div></a>
+        <a href=" """+'/app1' if random.random() < 0.5 else '/app2'+"""/"class="card"><span class="emoji-icon">רנדומלי</span><h2><<< >>></h2><div class="tag"></div></a>
         <a href="/app2/" class="card"><span class="emoji-icon">v2</span><h2>פשוט</h2><div class="tag">לאינטרנט מסונן</div></a>
     </div>
 
@@ -155,8 +154,8 @@ MENU_HTML = """
 
 # --- 4. חיבור האפליקציות ---
 app = DispatcherMiddleware(main_app, {
-    'app1':app1,
-    'app2':app2
+    '/app1':app1,
+    '/app2':app2
 })
 
 # --- 5. הרצה ---
