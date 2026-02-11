@@ -155,7 +155,7 @@ HTML_PAGE = """
         <p class="opacity-75">סורק אתרים מתקדם | מצב: <strong>{{ theme.name }}</strong></p>
         
         <div class="d-flex justify-content-center gap-2 mt-3">
-            <a href="/html" class="btn btn-sm btn-outline-light">החלף עיצוב רנדומלי 🎲</a>
+            <a href="/app1" class="btn btn-sm btn-outline-light">החלף עיצוב רנדומלי 🎲</a>
         </div>
     </div>
 
