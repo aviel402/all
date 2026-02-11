@@ -189,7 +189,7 @@ HTML_PAGE = """
         <p class="opacity-75 lead">מערכת חקר וסריקת קוד מקור</p>
         
         <!-- Theme Randomizer Button -->
-        <form method="GET" action="/" class="d-inline-block mt-2">
+        <form method="GET" action="/app1/" class="d-inline-block mt-2">
             <!-- אם יש כבר URL נשמור אותו כשנחליף ערכת נושא -->
             <input type="hidden" name="url" value="{{ url if url else '' }}">
             <input type="hidden" name="new_theme" value="true">
