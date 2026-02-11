@@ -4,7 +4,6 @@ from flask import Flask, render_template_string, send_from_directory
 import os
 import random
 
-x = 
 
 # --- 1. דף "בפיתוח" מעוצב ---
 def a(text):
