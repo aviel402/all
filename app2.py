@@ -1,125 +1,206 @@
 import requests
 import re
-from flask import Flask, render_template_string, request, Response
-from urllib.parse import urljoin
+import io
+import zipfile
+import os
+from flask import Flask, render_template_string, request, Response, send_file
+from urllib.parse import urljoin, urlparse
 
 app = Flask(__name__)
 
-def analyze_assets(html, base_url):
-    """מחלץ תמונות וקבצים חיצוניים (JS/CSS)"""
-    # חילוץ תמונות - חיפוש פשוט עם Regex
-    img_urls = re.findall(r'<img [^>]*src=["\']([^"\']+)["\']', html, re.IGNORECASE)
-    images = list(set([urljoin(base_url, img) for img in img_urls if img]))
-    
-    # חילוץ קבצים חיצוניים (Scripts & Stylesheets)
-    scripts = re.findall(r'<script [^>]*src=["\']([^"\']+)["\']', html, re.IGNORECASE)
-    styles = re.findall(r'<link [^>]*href=["\']([^"\']+)["\']', html, re.IGNORECASE)
-    
-    # איחוד רשימות וניקוי כפילויות
-    all_externals = scripts + styles
-    external_files = list(set([urljoin(base_url, f) for f in all_externals if f]))
-    
-    return images, external_files
+# --- פונקציות עזר ---
 
+def get_page_content(url):
+    """פונקציה עוטפת לבקשות רשת עם הגדרות קידוד וכותרות"""
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
+    try:
+        response = requests.get(url, headers=headers, timeout=15)
+        response.encoding = response.apparent_encoding
+        return response
+    except Exception as e:
+        return None
+
+def generate_zip(url):
+    """
+    1. מוריד את ה-HTML
+    2. מוצא את כל הנכסים (תמונות, סקריפטים)
+    3. מוריד אותם לזיכרון
+    4. מעדכן את ה-HTML שיצביע לנכסים המקומיים
+    5. מחזיר קובץ ZIP בייט-סטרים
+    """
+    main_response = get_page_content(url)
+    if not main_response:
+        return None
+
+    html_content = main_response.text
+    base_url = url
+    
+    # זיהוי כל הנכסים בעזרת Regex
+    # קבוצה 1: התגית כולה, קבוצה 2: ה-URL
+    assets_patterns = [
+        (r'(<img [^>]*src=["\'])([^"\']+)(["\'])', 'images'),
+        (r'(<script [^>]*src=["\'])([^"\']+)(["\'])', 'js'),
+        (r'(<link [^>]*href=["\'])([^"\']+)(["\'])', 'css')
+    ]
+
+    zip_buffer = io.BytesIO()
+    
+    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+        file_counter = 0
+        
+        # מעבר על כל סוגי הקבצים (img, script, link)
+        for pattern, folder_name in assets_patterns:
+            matches = re.findall(pattern, html_content, re.IGNORECASE)
+            
+            for prefix, src, suffix in matches:
+                abs_url = urljoin(base_url, src)
+                
+                try:
+                    # הורדת הנכס
+                    asset_res = get_page_content(abs_url)
+                    if asset_res and asset_res.status_code == 200:
+                        # יצירת שם קובץ ייחודי מקומי
+                        ext = os.path.splitext(urlparse(src).path)[1]
+                        if not ext: ext = ".txt" # ברירת מחדל אם אין סיומת
+                        if folder_name == 'images' and ext == '.txt': ext = '.jpg'
+                        
+                        file_counter += 1
+                        local_filename = f"{folder_name}/file_{file_counter}{ext}"
+                        
+                        # כתיבה ל-ZIP
+                        zip_file.writestr(local_filename, asset_res.content)
+                        
+                        # החלפה בקוד ה-HTML המקורי כך שיצביע לקובץ המקומי
+                        # אנו מחליפים רק את ה-src הספציפי הזה
+                        # (החלפה פשוטה עשויה להיות מסוכנת, אבל זה הפתרון הפשוט ללא דפדפן מלא)
+                        html_content = html_content.replace(src, local_filename)
+                except Exception as e:
+                    print(f"Skipped {abs_url}: {e}")
+                    continue
+
+        # כתיבת קובץ ה-HTML המתוקן לראשי
+        zip_file.writestr('index.html', html_content)
+    
+    zip_buffer.seek(0)
+    return zip_buffer
+
+# --- HTML Template ---
 HTML_PAGE = """
 <!DOCTYPE html>
 <html lang="he" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <title>Web-Scanner Pro | Extract</title>
+    <title>Web-Scanner Pro | App 2</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
-        body { background: #0f172a; color: #e2e8f0; font-family: system-ui, -apple-system, sans-serif; }
-        .glass-card { background: rgba(30, 41, 59, 0.7); border-radius: 15px; border: 1px solid #334155; padding: 20px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
-        .asset-list { max-height: 300px; overflow-y: auto; background: #1e293b; border-radius: 10px; padding: 15px; }
+        body { background: #0f172a; color: #e2e8f0; font-family: 'Segoe UI', system-ui, sans-serif; min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        .glass-card { 
+            background: rgba(30, 41, 59, 0.7); 
+            border-radius: 20px; 
+            border: 1px solid #334155; 
+            padding: 40px; 
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5); 
+            backdrop-filter: blur(10px);
+            width: 100%;
+            max-width: 700px;
+        }
         
-        /* גלילה מעוצבת */
-        .asset-list::-webkit-scrollbar { width: 8px; }
-        .asset-list::-webkit-scrollbar-track { background: #0f172a; }
-        .asset-list::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
+        h1 { 
+            background: -webkit-linear-gradient(#00f2fe, #4facfe); 
+            -webkit-background-clip: text; 
+            -webkit-text-fill-color: transparent; 
+            font-weight: 800;
+            margin-bottom: 30px;
+        }
 
-        .btn-action { background: linear-gradient(135deg, #00f2fe, #4facfe); border: none; color: white; margin-top: 5px; font-weight: bold; }
-        .btn-action:hover { filter: brightness(1.1); color: white; }
+        .search-input {
+            background: #1e293b;
+            border: 1px solid #475569;
+            color: white;
+            padding: 15px;
+            border-radius: 12px;
+            font-size: 1.1rem;
+        }
+        .search-input:focus {
+            background: #334155;
+            color: white;
+            box-shadow: 0 0 15px rgba(79, 172, 254, 0.3);
+            border-color: #4facfe;
+        }
+
+        /* עיצוב כפתורים מיוחד */
+        .action-btn {
+            padding: 20px;
+            border-radius: 15px;
+            border: none;
+            color: white;
+            font-size: 1.2rem;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            text-decoration: none;
+            margin-bottom: 15px;
+            width: 100%;
+        }
+
+        .btn-copy { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+        .btn-download-html { background: linear-gradient(135deg, #2af598 0%, #009efd 100%); }
+        .btn-download-zip { background: linear-gradient(135deg, #ff9a9e 0%, #fecfef 99%, #fecfef 100%); color: #444; }
+
+        .action-btn:hover { transform: translateY(-3px); box-shadow: 0 5px 15px rgba(0,0,0,0.3); color: inherit; }
         
-        .file-link { color: #38bdf8; text-decoration: none; font-size: 0.9rem; display: block; margin-bottom: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .file-link:hover { text-decoration: underline; color: #7dd3fc; }
-        
-        .raw-code-box { display: none; }
+        textarea { display: none; }
     </style>
 </head>
-<body class="container py-5">
-    <h1 class="text-center mb-4 display-4 fw-bold" style="background: -webkit-linear-gradient(#00f2fe, #4facfe); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">Web-Scanner Pro <small style="-webkit-text-fill-color: #64748b; font-size: 0.5em;">App 2</small></h1>
-    
-    <div class="glass-card mb-4">
-        <form action="/app2" method="GET" class="row g-2">
-            <div class="col-md-10">
-                <input type="text" name="url" class="form-control bg-dark text-light border-secondary" placeholder="הכנס כתובת אתר (לדוגמה: ynet.co.il)..." value="{{ url }}" required>
-            </div>
-            <div class="col-md-2">
-                <button type="submit" class="btn btn-action w-100 h-100">סרוק אתר 🔍</button>
+<body>
+
+    <div class="glass-card text-center">
+        <h1>Web-Scanner Pro</h1>
+        
+        <form action="/app2" method="GET" class="mb-4">
+            <div class="input-group">
+                <input type="text" name="url" class="form-control search-input" placeholder="הדבק כאן כתובת אתר..." value="{{ url }}" required>
+                <button class="btn btn-primary px-4 fw-bold" type="submit">סרוק 🚀</button>
             </div>
         </form>
+
+        {% if error %}
+            <div class="alert alert-danger">{{ error }}</div>
+        {% endif %}
+
+        {% if has_results %}
+            <div class="d-grid gap-3 mt-5">
+                <!-- כפתור 1: העתקה -->
+                <button onclick="copyToClipboard()" class="action-btn btn-copy">
+                   📋 העתק קוד מקור (Copy Source)
+                </button>
+
+                <!-- כפתור 2: הורדת HTML -->
+                <a href="/app2/download_html?url={{ url }}" class="action-btn btn-download-html">
+                   📄 הורד כקובץ HTML (Download File)
+                </a>
+
+                <!-- כפתור 3: הורדת ZIP מלא -->
+                <a href="/app2/download_zip?url={{ url }}" class="action-btn btn-download-zip">
+                   📦 הורד אתר מלא ב-ZIP (כולל תמונות)
+                </a>
+            </div>
+
+            <!-- אזור מוסתר להעתקה -->
+            <textarea id="raw_code">{{ html_content }}</textarea>
+        {% endif %}
     </div>
-
-    {% if error %}
-        <div class="alert alert-danger glass-card text-center border-danger text-danger bg-opacity-10">{{ error }}</div>
-    {% endif %}
-
-    {% if has_results %}
-    <div class="row g-4">
-        <div class="col-md-4">
-            <div class="glass-card h-100 d-flex flex-column">
-                <h4 class="mb-3 text-info">קוד מקור (HTML)</h4>
-                <p class="text-secondary small">הקוד נסרק בהצלחה. ניתן להעתיק לקליפבורד או להוריד כקובץ מקומי.</p>
-                <div class="mt-auto">
-                    <button onclick="copyToClipboard()" class="btn btn-outline-info w-100 mb-2">העתק קוד לקליפבורד 📋</button>
-                    <a href="/app2/download?url={{ url }}" class="btn btn-action w-100">הורד קובץ index.html 📥</a>
-                </div>
-            </div>
-        </div>
-
-        <div class="col-md-4">
-            <div class="glass-card h-100">
-                <h4 class="mb-3 text-warning">תמונות ({{ images|length }})</h4>
-                <div class="asset-list">
-                    {% if images %}
-                        {% for img in images %}
-                            <a href="{{ img }}" target="_blank" class="file-link" title="{{ img }}">🖼️ {{ img.split('/')[-1] or 'image' }}</a>
-                        {% endfor %}
-                    {% else %}
-                        <div class="text-muted text-center mt-4">לא נמצאו תמונות</div>
-                    {% endif %}
-                </div>
-            </div>
-        </div>
-
-        <div class="col-md-4">
-            <div class="glass-card h-100">
-                <h4 class="mb-3 text-success">קבצים חיצוניים ({{ externals|length }})</h4>
-                <div class="asset-list">
-                    {% if externals %}
-                        {% for file in externals %}
-                            <a href="{{ file }}" target="_blank" class="file-link" title="{{ file }}">🔗 {{ file.split('/')[-1] or 'file' }}</a>
-                        {% endfor %}
-                    {% else %}
-                        <div class="text-muted text-center mt-4">לא נמצאו קבצים חיצוניים</div>
-                    {% endif %}
-                </div>
-            </div>
-        </div>
-    </div>
-    {% endif %}
-
-    <textarea id="raw_code" class="raw-code-box">{{ html_content }}</textarea>
 
     <script>
         function copyToClipboard() {
             const code = document.getElementById('raw_code').value;
-            if (!code) return;
             navigator.clipboard.writeText(code).then(() => {
-                const btn = document.querySelector('.btn-outline-info');
+                const btn = document.querySelector('.btn-copy');
                 const originalText = btn.innerText;
-                btn.innerText = 'הועתק בהצלחה! ✅';
+                btn.innerText = '✅ הקוד הועתק בהצלחה!';
                 setTimeout(() => btn.innerText = originalText, 2000);
             });
         }
@@ -128,70 +209,60 @@ HTML_PAGE = """
 </html>
 """
 
-# שינוי נתיב ראשי ל-/app2
+# --- Routes ---
+
 @app.route('/', methods=['GET'])
 def index():
     target_url = request.args.get('url', '').strip()
-    data = {
-        "url": target_url, 
-        "has_results": False,
-        "images": [],
-        "externals": [],
-        "html_content": ""
-    }
+    data = {"url": target_url, "has_results": False, "html_content": ""}
     
     if target_url:
-        if not target_url.startswith(('http://', 'https://')):
-            target_url = 'https://' + target_url
-            data["url"] = target_url # עדכון ה-URL שמוצג למשתמש
-            
-        try:
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-            }
-            res = requests.get(target_url, headers=headers, timeout=10)
-            res.raise_for_status()
-            
-            # טיפול בקידוד עברית
-            res.encoding = res.apparent_encoding
-            
-            images, externals = analyze_assets(res.text, target_url)
-            
+        target_url = target_url if target_url.startswith(('http://', 'https://')) else 'https://' + target_url
+        data["url"] = target_url
+        
+        res = get_page_content(target_url)
+        if res and res.status_code == 200:
             data.update({
                 "html_content": res.text,
-                "images": images,
-                "externals": externals,
                 "has_results": True
             })
-        except Exception as e:
-            data["error"] = f"שגיאה בעת הסריקה: {str(e)}"
+        else:
+            data["error"] = "לא ניתן לגשת לאתר זה (שגיאת חיבור או כתובת שגויה)."
             
     return render_template_string(HTML_PAGE, **data)
 
-# שינוי נתיב ההורדה ל-/app2/download
-@app.route('/download')
-def download():
-    """מאפשר הורדה של הקוד כקובץ HTML"""
+@app.route('/download_html')
+def download_html():
     target_url = request.args.get('url')
-    if not target_url:
-        return "No URL provided", 400
-        
-    try:
-        if not target_url.startswith(('http://', 'https://')):
-             target_url = 'https://' + target_url
-
-        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'}
-        res = requests.get(target_url, headers=headers, timeout=10)
-        res.encoding = res.apparent_encoding # חשוב לעברית בקובץ המורד
-        
+    if not target_url: return "Missing URL", 400
+    
+    res = get_page_content(target_url)
+    if res:
         return Response(
             res.text,
             mimetype="text/html",
-            headers={"Content-disposition": "attachment; filename=index.html"}
+            headers={"Content-disposition": "attachment; filename=website_scan.html"}
         )
+    return "Error downloading content", 500
+
+@app.route('/download_zip')
+def download_zip_route():
+    target_url = request.args.get('url')
+    if not target_url: return "Missing URL", 400
+    
+    try:
+        zip_buffer = generate_zip(target_url)
+        if zip_buffer:
+            return send_file(
+                zip_buffer,
+                mimetype='application/zip',
+                as_attachment=True,
+                download_name='full_website_scan.zip'
+            )
+        else:
+            return "Could not generate ZIP (Page might be inaccessible)", 500
     except Exception as e:
-        return f"Error downloading: {str(e)}", 500
+        return f"System Error: {str(e)}", 500
 
 if __name__ == '__main__':
-    # מפעיל על פורט 5000 כברירת מחדל
     app.run(debug=True, port=5000)
