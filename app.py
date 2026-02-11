@@ -554,7 +554,7 @@ def boot_system():
     return master_application
 
 # Global Application Instance for WSGI Servers (Gunicorn/uWSGI)
-application = boot_system()
+app = boot_system()
 
 if __name__ == "__main__":
     banner = f"""
@@ -576,7 +576,7 @@ if __name__ == "__main__":
     run_simple(
         SystemConfig.HOST, 
         SystemConfig.PORT, 
-        application, 
+        app, 
         use_reloader=True, 
         use_debugger=SystemConfig.DEBUG,
         threaded=True
