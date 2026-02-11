@@ -61,9 +61,6 @@ def index():
 
 
 # ✅ Proper random routing handled in backend
-@main_app.route('/random/')
-def random_redirect():
-    return redirect('/app1/' if random.random() < 0.5 else '/app2/')
 
 
 MENU_HTML = """
@@ -72,7 +69,7 @@ MENU_HTML = """
 <head>
     <meta charset="UTF-8">
     <title>Arcade Station</title>
-    <link href="                                                       ;700;900&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;700;900&display=swap" rel="stylesheet">
     <style>
         :root {
             --primary: #6c7ce7;
